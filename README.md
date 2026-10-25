@@ -69,8 +69,10 @@ bleiben.
 
 | Datei | Inhalt |
 |---|---|
-| `example-fwview.html` | Spiegelseite der Firewall aus `fwview.py` |
-| `example-agview.html` | Spiegelseite der AdGuard-Regeln aus `agview.py`, mit Trefferzahlen und Doku-Abgleich |
+| [`example-fwview.html`](https://one7two99.github.io/openwrt-audit-kit/example-fwview.html) | Spiegelseite der Firewall aus `fwview.py` |
+| [`example-agview.html`](https://one7two99.github.io/openwrt-audit-kit/example-agview.html) | Spiegelseite der AdGuard-Regeln aus `agview.py`, mit Trefferzahlen und Doku-Abgleich |
+
+Die Links zeigen auf die gerenderten Kopien unter `docs/` (GitHub Pages); die Dateien in `reports/` sind identisch.
 
 Beide Dateien sind eigenständig (Stylesheet inline, keine externen Verweise).
 
