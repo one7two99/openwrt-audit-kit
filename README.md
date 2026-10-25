@@ -1,13 +1,13 @@
 # openwrt-audit-kit
 
 Lesende Werkzeuge für ein OpenWrt-Heimnetz mit AdGuard Home: Firewall und DNS-Regeln als
-lesbare Spiegelseiten rendern, Firewall- und Query-Log für Audits auswerten, den Zustand
-mehrerer Geräte diffbar inventarisieren. Alles läuft auf der Workstation gegen den Router per
+lesbare Spiegelseiten rendern, Firewall- und Query-Log für Audits auswerten. Alles läuft auf
+der Workstation gegen den Router per
 SSH (Key-Auth, `BatchMode`), nichts wird auf dem Gerät geschrieben, mit einer gekennzeichneten
 Ausnahme (`pushset.sh`). Nur Python-3-Standardbibliothek und POSIX-Shell.
 
 Entstanden aus der Dokumentation eines konkreten Netzes (OpenWrt One, AdGuard Home, GL.iNet
-Spitz Plus als LTE-Uplink, Home Assistant OS, NETGEAR-Switch). Defaults wie
+Spitz Plus als LTE-Uplink). Defaults wie
 `root@192.168.30.1` stammen daher und sind per Option oder Variable änderbar.
 
 ## Werkzeuge
@@ -18,7 +18,6 @@ Spitz Plus als LTE-Uplink, Home Assistant OS, NETGEAR-Switch). Defaults wie
 | `scripts/agview.py` | AdGuard-Benutzerregeln, Rewrites und persistente Clients als HTML plus JSON. Liest aus `adguardhome.yaml` nur die Abschnitte `user_rules`, `filtering`, `clients`. Optional Abgleich gegen eine Markdown-Doku (`--doc`, sonst `--no-doc`) und Trefferzahl je Regel aus dem Query-Log (`--querylog`). | nein |
 | `scripts/fwlog-audit.py` | Audit-Tabellen (Markdown) aus dem Firewall-Log eines Zeitfensters: Zeilen je Log-Klasse, Stundenprofil, INPUT-Rauschen je Zone, Verkehr zwischen Zonen, Egress-Blocks je Regel, Log-Limit-Sättigung, Scan-Indikatoren. | nein |
 | `scripts/dnslog-audit.py` | Audit-Tabellen aus dem AdGuard-Query-Log: Volumen je Client und Zone, Blocklisten, Reichweite der Default-Deny-Zonen, DoH/DoT-Umgehung, Anfragetypen, NXDOMAIN, Tunnel-Heuristik, Rate-Limit-Sättigung, Upstream-Latenz. | nein |
-| `scripts/factdump.sh` | Normalisiertes, deterministisch diffbares Fakteninventar von Router, LTE-Uplink, Home Assistant und Switch, mit Redaktion von Geheimnissen und Leak-Scan. | nein |
 | `scripts/pushset.sh` | Prüft eine IP-Set-Datei lokal, kopiert sie auf den Router und lädt das fw4-Set (`option loadfile`) neu. Fragt vor jedem Schreibschritt. | **ja** |
 | `scripts/wificli.sh` | Einzelne SSIDs oder ganze Radios per UCI an- und ausschalten. Läuft auf dem Router. Warnung im Kopf lesen: das 5-GHz-Radio kann das eigene Admin-WLAN tragen. | ja (UCI) |
 | `scripts/modemctl.sh` | LTE-Modem eines GL.iNet Spitz Plus (GL-X2000) ein- und ausschalten, mit Anleitung zur USB-Bus-ID. Läuft auf dem Spitz. | ja |
@@ -80,8 +79,7 @@ Die HTML-Dateien sind eigenständig (Stylesheet inline, keine externen Verweise)
 Die Ausgaben enthalten echte IP-Adressen, MACs und Gerätenamen des untersuchten Netzes.
 Erzeugte `fwview-*`, `agview-*`, `fwlog-audit-*` und `dnslog-audit-*` Dateien sind per
 `.gitignore` ausgeschlossen. Kein Skript liest WLAN-Passphrasen, WireGuard-Schlüssel oder
-die vollständige `adguardhome.yaml`; `factdump.sh` redigiert bekannte Geheimnisfelder und
-bricht bei Treffern seines Leak-Scans ab.
+die vollständige `adguardhome.yaml`.
 
 ## Lizenz
 

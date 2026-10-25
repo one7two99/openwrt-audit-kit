@@ -9,8 +9,6 @@ agview.html
 agview.json
 fwlog-audit-*.md
 dnslog-audit-*.md
-factinv-*
-*.LEAK-UNSICHER
 querylog.json*
 *.log
 __pycache__/
