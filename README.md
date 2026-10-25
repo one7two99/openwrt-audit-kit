@@ -63,6 +63,16 @@ bleiben.
 
 Beide Dateien sind eigenständig (Stylesheet inline, keine externen Verweise).
 
+**`fwview.py`**: eine Sektion je Quellzone, INPUT getrennt von FORWARD, IP-Sets aufgeklappt mit
+Mitgliedern und Gerätenamen.
+
+![fwview: Firewall-Regeln als Spiegelseite](docs/example-fwview.png)
+
+**`agview.py`**: Regeln nach den Überschriften der AdGuard-Liste gruppiert, Treffer je Regel aus
+dem Query-Log, Hinweise zu Clients und ungenutzten Freigaben, Abgleich gegen die Doku.
+
+![agview: AdGuard-Benutzerregeln als Spiegelseite](docs/example-agview.png)
+
 ## Voraussetzungen
 
 - Workstation: Python ≥ 3.9 (`zoneinfo`), OpenSSH, für `pushset.sh` zusätzlich `scp`.
