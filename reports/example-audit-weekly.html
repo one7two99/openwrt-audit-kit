@@ -1,0 +1,4545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firewall- und DNS-Audit 2026-10-24 (Firewall-Log, AdGuard-Query-Log)</title>
+<style>
+/* Self-contained styling for the generated HTML.
+   No external fonts, no CDN: these pages must open with no network at all,
+   because one of their jobs is to be readable while the network is broken. */
+:root {
+  --bg: #fbfaf8; --fg: #1c1b19; --muted: #5c5a55; --rule: #ddd9d2;
+  --code-bg: #f2efe9; --accent: #7a4b1e; --table-head: #efece5;
+  --stripe: #f3f1ec;
+  --accept: #1a7d3c; --reject: #b3311c; --warn: #9a6a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1a18; --fg: #e6e3dd; --muted: #9d9890; --rule: #38352f;
+    --code-bg: #262420; --accent: #d3a06a; --table-head: #262420;
+    --stripe: #221f1b;
+    --accept: #5fbf7f; --reject: #e8776a; --warn: #d9a441;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+#wrap { max-width: 62rem; margin: 0 auto; padding: 2.5rem 1.25rem 6rem; }
+header.doc { border-bottom: 2px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.doc h1.title { margin: 0 0 .25rem; font-size: 1.9rem; letter-spacing: -.01em; }
+header.doc .sub { color: var(--muted); font-size: .9rem; }
+header.doc .sub a { color: var(--accent); }
+
+h1, h2, h3, h4 { line-height: 1.25; margin: 2.2rem 0 .7rem; }
+h1 { font-size: 1.65rem; border-bottom: 1px solid var(--rule); padding-bottom: .3rem; }
+h2 { font-size: 1.3rem; }
+h3 { font-size: 1.08rem; }
+h4 { font-size: .98rem; color: var(--muted); }
+h1:first-of-type { margin-top: 0; }
+p, ul, ol { margin: .7rem 0; }
+a { color: var(--accent); }
+strong { font-weight: 650; }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+
+code {
+  background: var(--code-bg); padding: .12em .35em; border-radius: 3px;
+  font: .87em/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg); border: 1px solid var(--rule); border-radius: 5px;
+  padding: .8rem 1rem; overflow-x: auto; margin: 1rem 0;
+}
+pre code { background: none; padding: 0; font-size: .84rem; line-height: 1.55; }
+
+/* Wide tables scroll inside their own box; the page never scrolls sideways. */
+.tablewrap { overflow-x: auto; margin: 1.1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { border: 1px solid var(--rule); padding: .42rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--table-head); font-weight: 650; }
+td code { white-space: nowrap; }
+
+/* Reference pages (firewall-rules, adguardhome-custom-rules, media-fqdns):
+   wider column for the dense multi-column tables, plus a few extra table
+   readability aids that would be wasted on the prose-heavy pages. All gated
+   on the `wide` render() flag in mkhtml.sh, so nothing here touches
+   network-documentation.html / changelog.html / readme.html / etc. */
+body.wide #wrap { max-width: min(96vw, 100rem); }
+body.wide th { position: sticky; top: 0; }
+body.wide tbody tr:nth-child(even) { background: var(--stripe); }
+body.wide td { font-variant-numeric: tabular-nums; }
+
+/* Multi-value table cells (e.g. two devices in one "Quelle MAC/IP" cell),
+   turned into a real list by mkhtml.sh's post-processing step. Default <ul>
+   spacing is too generous inside a table cell. */
+.cell-list { margin: 0; padding-left: 1.1em; }
+.cell-list li + li { margin-top: .15em; }
+
+/* Stop-sign marker on the "Block-<zone>-to-Internet" catch-all rules --
+   the last rule in a zone's forward chain, distinct from an ordinary deny
+   rule as a logged safety net. Unicode glyph, not an icon font. */
+.rule-catchall { color: var(--reject); font-weight: 650; white-space: nowrap; cursor: help; }
+
+/* Allow/block markers for Aktion/Wirkung columns, added by the same
+   post-processing step. Text-based, not an icon font -- stays offline-safe. */
+.act { display: inline-flex; align-items: center; gap: .4em; font-weight: 650; white-space: nowrap; }
+.act::before { flex: none; }
+.act-accept { color: var(--accept); }
+.act-accept::before { content: "\2713"; }
+.act-reject { color: var(--reject); }
+.act-reject::before { content: "\2715"; }
+
+/* Einstufung badges for media-fqdns.md (KERN/PLATTFORM/TRACKER/UNKLAR) --
+   four categories, not a binary allow/block, so color-coded text rather
+   than a check/cross glyph. */
+.badge {
+  display: inline-block; padding: .08em .55em; border-radius: 999px;
+  font-weight: 650; font-size: .85em; border: 1px solid transparent;
+}
+.badge-kern      { color: var(--accent); border-color: var(--accent); }
+.badge-tracker   { color: var(--reject); border-color: var(--reject); }
+.badge-unklar    { color: var(--warn);   border-color: var(--warn); }
+.badge-plattform { color: var(--muted);  border-color: var(--rule); }
+
+blockquote {
+  margin: 1.1rem 0; padding: .1rem 0 .1rem 1rem;
+  border-left: 3px solid var(--accent); color: var(--muted);
+}
+blockquote p { margin: .45rem 0; }
+
+/* Table of contents */
+nav#TOC {
+  background: var(--code-bg); border: 1px solid var(--rule); border-radius: 5px;
+  padding: 1rem 1.25rem; margin: 0 0 2.5rem;
+}
+nav#TOC > ul { margin: 0; padding-left: 1.1rem; }
+nav#TOC ul ul { padding-left: 1.1rem; }
+nav#TOC li { margin: .12rem 0; }
+nav#TOC a { text-decoration: none; }
+nav#TOC a:hover { text-decoration: underline; }
+
+@media print {
+  :root { --bg: #fff; --fg: #000; --code-bg: #f4f4f4; --rule: #bbb; }
+  #wrap { max-width: none; padding: 0; }
+  nav#TOC { break-after: page; }
+  pre, table, blockquote { break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+}
+
+</style>
+</head>
+<body class="wide">
+<div id="wrap">
+<header class="doc"><h1 class="title">Firewall- und DNS-Audit 2026-10-24 (Firewall-Log, AdGuard-Query-Log)</h1><div class="sub">Generated 2026-10-24 18:08 CEST from <code>docs/audits/firewall-dns-audit-2026-10-24.md</code> &middot; <a href="../html/index.html">index</a></div></header>
+<nav id="TOC" role="doc-toc"><ul>
+<li><a href="#firewall--und-dns-audit-2026-10-24-firewall-log-adguard-query-log" id="toc-firewall--und-dns-audit-2026-10-24-firewall-log-adguard-query-log">Firewall- und DNS-Audit 2026-10-24 (Firewall-Log, AdGuard-Query-Log)</a>
+<ul>
+<li><a href="#1-rahmen" id="toc-1-rahmen">1. Rahmen</a></li>
+<li><a href="#2-ergebnis-in-kürze" id="toc-2-ergebnis-in-kürze">2. Ergebnis in Kürze</a></li>
+<li><a href="#3-befunde" id="toc-3-befunde">3. Befunde</a></li>
+<li><a href="#4-was-läuft-gut" id="toc-4-was-läuft-gut">4. Was läuft gut</a></li>
+<li><a href="#5-vorschläge-nachschärfen" id="toc-5-vorschläge-nachschärfen">5. Vorschläge (nachschärfen)</a></li>
+<li><a href="#6-wo-sichtbarkeit-fehlt" id="toc-6-wo-sichtbarkeit-fehlt">6. Wo Sichtbarkeit fehlt</a></li>
+<li><a href="#7-methode" id="toc-7-methode">7. Methode</a></li>
+<li><a href="#anhang-a-firewall-log-tabellen-generiert-fenster-2110-2124--2410-1026" id="toc-anhang-a-firewall-log-tabellen-generiert-fenster-2110-2124--2410-1026">Anhang A: Firewall-Log-Tabellen (generiert, Fenster 21.10. 21:24 – 24.10. 10:26)</a></li>
+<li><a href="#anhang-b-adguard-query-log-tabellen-generiert-fenster-2110-2114--2410-1024" id="toc-anhang-b-adguard-query-log-tabellen-generiert-fenster-2110-2114--2410-1024">Anhang B: AdGuard-Query-Log-Tabellen (generiert, Fenster 21.10. 21:14 – 24.10. 10:24)</a></li>
+</ul></li>
+</ul></nav>
+<h1 id="firewall--und-dns-audit-2026-10-24-firewall-log-adguard-query-log">Firewall- und DNS-Audit 2026-10-24 (Firewall-Log, AdGuard-Query-Log)</h1>
+<p><strong>Stand:</strong> 2026-10-24, 10:30 Uhr. Dritter Lauf nach den Audits vom 17.10. und 22.10. (<code>firewall-dns-audit-2026-10-22.md</code>), vom Operator als Wochenlauf angefordert. Ausgeführt aus der <code>claude-home</code>-Session (Coding Agent, T0), lesend; keine Änderung am Gerät. Firmen- und Kundendomänen in den Anhängen durch dieselben Platzhalter ersetzt wie am 22.10. (<code>firma-intern.tld</code>, <code>kunde-a.tld</code> …). Leitfragen des Operators: Was ist auffällig? Was läuft gut? Wo nachschärfen? Wo fehlt Sichtbarkeit?</p>
+<h2 id="1-rahmen">1. Rahmen</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Quelle</th>
+<th>Fenster</th>
+<th>Umfang</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Firewall-Log (<code>/mnt/nvme/log/system.log</code>, <code>scripts/fwlog-audit.py --since '2026-10-18 00:00'</code>)</td>
+<td><strong>tatsächlich 21.10. 21:24 – 24.10. 10:26</strong> (61 h)</td>
+<td>1.240 Zeilen (22.10. 23:25: 876; seither +364 ≈ 10/h)</td>
+</tr>
+<tr>
+<td>AdGuard-Query-Log (<code>querylog.json</code>, <code>scripts/dnslog-audit.py --since '2026-10-18 00:00' --querylog &lt;gzip-Kopie&gt;</code>)</td>
+<td><strong>tatsächlich 21.10. 21:14 – 24.10. 10:24</strong> (61 h); <code>querylog.json.1</code> fehlt weiterhin</td>
+<td>164.000 Einträge, 17 Clients, 2.732 Namen, 44,2 % geblockt</td>
+</tr>
+<tr>
+<td>Regelwerk</td>
+<td>1.44.3 (unverändert seit 22.10. 22:59)</td>
+<td>Guard: 43 Regeln mit Set-Referenz rendern, Patch-Dateien unverändert</td>
+</tr>
+<tr>
+<td>Ergänzend</td>
+<td><code>nlbwmon</code> (Volumen je Gerät, Oktober), <code>logread</code>, <code>/proc/uptime</code>, <code>wg show</code>, AdGuard-YAML (nur <code>ratelimit</code>, <code>user_rules</code>, <code>upstream</code>, <code>tls</code>-Pfade)</td>
+<td>lesend</td>
+</tr>
+</tbody>
+</table></div>
+<p>Beide Logs beginnen am 21.10. abends; die Woche 18.–21.10. ist nicht auditierbar (Befund F1). Die Kinder-Geräte (<code>kids</code>) waren im Fenster nicht im Netz (keine hostapd-, DHCP-, Firewall- oder DNS-Zeile); der K1-DROID-Befund vom 18.10. (Private DNS) ist deshalb nicht nachgeprüft (S6).</p>
+<h2 id="2-ergebnis-in-kürze">2. Ergebnis in Kürze</h2>
+<p><strong>Auffällig</strong></p>
+<ul>
+<li><strong>F1 Boot-Rätsel vom 22.10. gelöst:</strong> nicht drei Boots, sondern zwei — 21.10. 23:00 und 22.10. 17:36. Der Router hat keine RTC; die ersten ~90 s nach dem Boot vom 22.10. tragen den Zeitstempel „21.10. 23:00:37–23:01:26" (<code>crond: time disparity of 1116 minutes</code> um 17:37:52). Davor 17:22:27 <code>eth0 link is down</code>. Lücke 18.–21.10.: Query-Log 21:14 <strong>und</strong> System-Log 21:23 am 21.10. neu begonnen, ohne Reboot (Kernel-Uptime lief seit 16.10. durch) — Operator-Eingriff wahrscheinlich. Beide Boots laut Operator (24.10.) beabsichtigte Stromausfälle (Umbau der zentralen Stromversorgung); das Leeren beider Logs am 21.10. ebenfalls vom Operator, beabsichtigt. <strong>F1 geschlossen.</strong></li>
+<li><strong>F2 <code>.20.217</code> identifiziert und geschlossen:</strong> Zufalls-MAC <code>02:dc:e2:be:bd:15</code> = <code>OP-S25</code> beim ersten Verbinden mit dem neuen Passwort (21.10. 22:30, Randomisierung noch an, 3 s später echte MAC auf derselben Association-ID). <code>.20.115</code> vom 17.10. laut Operator derselbe Fall.</li>
+<li><strong>F3 Docker-Quelladresse im LAN:</strong> <code>172.21.0.2</code> (Container-Netz von <code>OP-T490</code>) → Anthropic-API <code>tcp/443</code>, 9× am 23.10. 14:03, vom Router abgewiesen. <strong>Geklärt:</strong> eine Verbindung, zehn Sekunden nach dem manuellen ProtonVPN-Trennen auf dem Laptop; Masquerade-Regel vorhanden, einmaliges Race beim Interface-Umbau.</li>
+<li><strong>F4 Hub-PTR-Sweep weiter aktiv:</strong> 13.000 Blocks (68 % des Hub-DNS), 544 s am Rate-Limit in 124 Minuten; <code>ratelimit_whitelist</code> leer — V1 vom 17.10. unverändert offen. <strong>Umgesetzt 24.10. 13:13 (1.45.3).</strong></li>
+<li><strong>F6 Upstream-Latenz:</strong> p99 3,0 s, 1.029 Antworten &gt; 1 s, 76 Quad9-Fallbacks — wie am 22.10., kein Einzelfall.</li>
+</ul>
+<p><strong>Läuft gut</strong> (Abschnitt 4): Egress-Policy hält in jeder Zone (0 DoT/DoH-Durchbrüche, 63 Namensversuche alle geblockt), Management nur über den Tunnel (4 Direktversuche abgewiesen, zuletzt heute 10:24), <code>private</code>-Pins (F2 bekam kein DNS), Panel nach dem Umbau mit 3 Block-Zeilen in 36 h, Default-Deny-IoT exakt auf den Positivlisten, <code>.lan</code>-Leak geschlossen (V2 vom 22.10. wirkt: 294× lokal NXDOMAIN, 0 am Upstream).</p>
+<p><strong>Nachschärfen</strong> (Abschnitt 5): Rate-Limit-Ausnahme Hub (V1), <code>wpad</code>/<code>_ldap</code>/<code>_autodiscover</code> des Work-Laptops lokal beantworten statt an NextDNS leaken (V2), Zufalls-MAC-Gerät inventarisieren (V3), Docker-NAT auf <code>OP-T490</code> (V4), optionale Mutes Work-Sonden/TV-QUIC (V5), <code>a-api.anthropic.com</code>-Entscheidung (V6), Panel-Einzelfreigaben ab 26.10. (V7, Datengrundlage liegt in D9).</p>
+<p><strong>Sichtbarkeit fehlt</strong> (Abschnitt 6): kein Remote-Syslog (Lücke 18.–21.10. unwiederbringlich, Logs lokal löschbar), AdGuard-Rate-Limit-Drops unsichtbar (641 s über drei Zonen), keine RTC (Boot-Minute falsch gestempelt), Query-Log ohne Rotationsdatei, erlaubter Verkehr nur als <code>nlbwmon</code>-Volumen (bisher nicht im Audit), <code>kids</code>-Zone ohne Verkehr, DNS-Pfad von <code>.50.238</code> am 22.10. ungeklärt.</p>
+<h2 id="3-befunde">3. Befunde</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Nr.</th>
+<th>Befund</th>
+<th>Tabellen</th>
+<th>Einordnung</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td><strong>Boots und Log-Lücke.</strong> Kernel-Uptime 147.017 s um 10:26 → Boot <strong>22.10. 17:36:09</strong>. Davor <code>eth0 link is down</code> / <code>wan connectivity loss</code> 17:22:27, danach erste Zeilen 17:37:48. Die Zeilen „21.10. 23:00:37 kernel [3.8 s]" bis „23:01:26 AdGuard start" im RAM-Puffer (<code>logread</code>, der den 21.10.-Boot nicht überlebt hätte) gehören zum 22.10.-Boot: ohne RTC startet die Uhr mit dem letzten bekannten Stand, NTP korrigiert um 17:37:52 (<code>crond: time disparity of 1116 minutes</code>, <code>collectd: next interval 66921 s</code>). Damit: Boot 1 = 21.10. 23:00:13 (<code>init complete</code>), Boot 2 = 22.10. 17:36 (im Log als 23:00:51). Beide AdGuard-Starts (23:01:17, 23:01:26) sind je ein Boot. <strong>Lücke:</strong> Query-Log beginnt 21.10. 19:14Z = 21:14, <code>/mnt/nvme/log</code> 21:23:10 neu befüllt, System-Log ab 21:24:07 — bei durchlaufendem Kernel (ts 482.097 s = Boot 16.10.). Muster „beide Dateien weg, keine <code>.1</code>" = AdGuard-GUI „Query-Log leeren" plus Löschen/Neustart von <code>logd</code>. Kein Commit am 21.10. Abend; 22:29 <code>AP-DISABLED</code> (WLAN-Neustart), 23:00 Reboot → Operator-Abend. <strong>Operator 24.10.: beide Stromausfälle waren beabsichtigt (Umbau der zentralen Stromversorgung).</strong> <strong>Operator 24.10.: Query-Log und System-Log am 21.10. bewusst gelöscht.</strong> F1 damit vollständig geklärt; die Lücke 18.–21.10. ist gewollt</td>
+<td>T1, T2</td>
+<td><strong>Geschlossen.</strong> §13-Hinweis zur fehlenden RTC ergänzt (1.45.2)</td>
+</tr>
+<tr>
+<td>F2</td>
+<td><strong><code>192.168.20.217</code> = Zufalls-MAC <code>02:dc:e2:be:bd:15</code></strong> (lokal verwaltet), <code>phy1-ap0</code> (<code>private</code>, 5 GHz), <code>auth_alg=sae</code> erfolgreich 21.10. 22:30:52, Abmeldung 22:31:01. 6× <code>udp/53</code> an <code>192.168.20.1</code> abgewiesen (<code>Allow-private-router-dns</code> nur <code>admin_pins</code>); kein DHCP-Dialog (Adresse aus altem Lease), keine AdGuard-Anfrage. <strong><code>/etc/config/wireless</code> wurde 22:28:58 geschrieben (Passwortwechsel <code>private</code>, Operator), AP-Neustart 22:29:00 — die Anmeldung 112 s später gelang also mit dem neuen Passwort</strong> (SAE scheitert mit falschem Passwort vor dem Handshake, ohne <code>AP-STA-CONNECTED</code>). <strong>Operator 24.10.: das war <code>OP-S25</code> beim ersten Verbinden mit dem neuen Passwort, MAC-Randomisierung noch aktiv.</strong> Log bestätigt: Abmeldung <code>aa:42…</code> 22:31:01, Anmeldung <code>02:3b:91:99:ee:97</code> (<code>OP-S25</code>) 22:31:04 auf derselben <code>aid 2</code>, danach Randomisierung aus. Altes Lease <code>.217</code> = frühere Besuche mit derselben Zufalls-MAC. <strong>Geklärt.</strong> <code>.20.115</code> (<code>02:ec:4d:41:97:8e</code>, 17.10.) laut Operator 24.10. ebenfalls <code>OP-S25</code> mit damals aktiver Randomisierung — <strong>beide Zufalls-MAC-Funde geschlossen</strong> Gleiche Klasse: <code>.20.115</code> vom 17.10. (nlbwmon: MAC <code>02:ec:4d:41:97:8e</code>, ebenfalls Zufalls-MAC)</td>
+<td>T4, T9</td>
+<td><strong>Inventar (V3)</strong></td>
+</tr>
+<tr>
+<td>F3</td>
+<td><strong>Un-NATete Container-Pakete:</strong> <code>SRC=172.21.0.2 DST=160.79.104.10 tcp/443</code> (Anthropic-API), 9 Zeilen 23.10. 14:03:34–14:04:48, <code>reject private forward</code> (<code>OUT=eth0</code>). <code>172.21.0.0/16</code> ist die Docker-Bridge <code>br-580de9460563</code> auf <code>OP-T490</code> (Bridge-Adresse <code>.1</code>). Der Laptop leitet Container-Pakete ohne Masquerade ins LAN; der Router hat keine Route zurück und weist korrekt ab. <strong>Geklärt 24.10. (Journal des Laptops):</strong> 14:03:24 ProtonVPN in der App getrennt, NetworkManager löscht <code>proton0</code> und Kill-Switch-Interface, Routen neu; 14:03:34 <strong>eine</strong> Container-Verbindung (Quellport 37940, neun SYN-Wiederholungen bis 14:04:48) ohne NAT. Race beim VPN-Umschalten — NAT-Entscheidung fiel beim ersten Paket während des Interface-Umbaus. Masquerade-Regel <code>-s 172.21.0.0/16 ! -o br-580de9460563 -j MASQUERADE</code> vorhanden (283 Pakete seither), Docker-Backend iptables-nft, ufw aktiv</td>
+<td>T5, T9</td>
+<td><strong>Geschlossen</strong>, kein Konfigurationsfehler; Router korrekt</td>
+</tr>
+<tr>
+<td>F4</td>
+<td><strong>Hub-PTR-Sweep unverändert</strong> (N1 17.10., F2 22.10.): 254 <code>in-addr.arpa</code>-Namen, 13.000 Blocks = 68 % des Hub-DNS, 544 Sekunden ≥ 20/s in 124 Minuten; dazu 136 <code>NS</code>-Anfragen für den Root. <code>ratelimit_whitelist: []</code>. <strong>Nachtrag 24.10. 11:13:</strong> Sweep per Ignorierliste (<code>||60.168.192.in-addr.arpa^</code>, Query-Log + Statistik) aus dem Log genommen (Operator, GUI); Rate-Limit-Wirkung unverändert, D15 sieht sie ab jetzt nicht mehr. <strong>13:13:</strong> <code>ratelimit_whitelist</code> = <code>192.168.60.245</code> gesetzt (Operator, GUI)</td>
+<td>D4, D8, D9, D11, D15</td>
+<td><strong>V1 umgesetzt</strong>, Validierung im nächsten Audit</td>
+</tr>
+<tr>
+<td>F5</td>
+<td><strong>Rate-Limit trifft auch Admin-Geräte:</strong> <code>private</code> 9 s am Limit (alle drei Admin-Clients mit max 20/s), <code>work</code> 88 s (Laptop 43/s). Verworfene Anfragen stehen nicht im Log</td>
+<td>D4, D15</td>
+<td>Mit V1 entscheiden: Ausnahme nur Hub oder Limit anheben</td>
+</tr>
+<tr>
+<td>F6</td>
+<td><strong>Upstream:</strong> NextDNS 57.688 Antworten, p50 47 ms, p90 145 ms, <strong>p99 3.048 ms, 1.029 &gt; 1 s</strong>; Quad9-Fallback 76× (49 + 27). Zweiter Lauf in Folge mit diesem Bild (22.10.: p99 3,1 s, 594 &gt; 1 s, 76 Fallbacks)</td>
+<td>D16</td>
+<td><strong>Beobachten → NextDNS-Status prüfen (V9)</strong></td>
+</tr>
+<tr>
+<td>F7</td>
+<td><strong>Hub→Panel ohne Conntrack</strong> (F6 22.10.): 85 Zeilen am 22.10., 27 am 23.10. bis 08:51:38, seither keine. 5 Minuten <code>Block-iotsrv-wan-all</code> + 2 Minuten Zonen-Log am Limit</td>
+<td>T1, T5, T6</td>
+<td>Abgeklungen; V4 vom 22.10. nicht nötig</td>
+</tr>
+<tr>
+<td>F8</td>
+<td><strong><code>.lan</code>-Leak geschlossen:</strong> <code>||lan^$dnsrewrite=NXDOMAIN</code> steht in den Benutzerregeln; 294 <code>.lan</code>-Anfragen im Fenster (<code>localhost.lan</code> 238, <code>patchpilot-*.lan</code> 21, <code>_9443._https.adguard.home.arpa.lan</code> 11) alle <code>Reason 11</code>, Upstream <code>-</code>. <code>.local</code>: 0 Anfragen, Regel nicht nötig</td>
+<td>D12</td>
+<td>Erledigt (V2 22.10.)</td>
+</tr>
+<tr>
+<td>F9</td>
+<td><strong>Work-Laptop:</strong> 96.750 Anfragen an zwei Arbeitstagen (59 % des Gesamtvolumens), 34,5 % geblockt. <code>ipv6.msftconnecttest.com</code> 10.439× geblockt (<code>$important</code>-Benutzerregel, Laptop wiederholt), 6.058 NXDOMAIN: <code>wpad.firma-intern.tld</code> 3.893, <code>_autodiscover._tcp.kunde-a.tld</code> 739, <code>ccm1.intern.kunde-b.tld</code> 242, <code>_ldap._tcp.*</code> je 22 — <strong>alle am Upstream</strong>. 613 PTR-Namen (<code>in-addr.arpa</code>, erlaubt). Firewall: 332 Zeilen, davon 284 ICMP/<code>udp/33434</code>-Sonden zu drei Zscaler-Adressen, 4 Minuten am Limit; <code>tcp/8443</code> zu <code>192.168.5.221</code> (Firmenadresse, Skript-Label „Uplink-LuCI" falsch)</td>
+<td>D4, D7, D12, D13, T6, T9</td>
+<td>Policy hält; <strong>Hygiene (V2)</strong>, optional <strong>V5</strong></td>
+</tr>
+<tr>
+<td>F10</td>
+<td><strong>TV:</strong> 15.895 Anfragen, 91,1 % geblockt (<code>leiniao.com</code> 6.853, Google-Assistant 5.482, Apple-Medien 1.367, <code>mefo1.zdf.de</code> 588); konstant ≈ 660/h auch nachts (Gerät im Standby). Firewall: 103 Zeilen <code>Block-tv-wan-all</code>, 84 davon QUIC <code>udp/443</code> zu Google, 2 Minuten am Limit; 2× DoT-Versuch an den Router</td>
+<td>D4, D7, D8, T6</td>
+<td>Bestätigung; optional <strong>V5</strong> (QUIC-Mute, V6 vom 17.10.)</td>
+</tr>
+<tr>
+<td>F11</td>
+<td><strong>Panel nach dem Umbau:</strong> <code>Block-panel-wan-all</code> 3 Zeilen seit 22.10. 22:52 — 2× <code>tcp/8123</code> 22:52 (Log-vor-Zone-Artefakt, dokumentiert), 1× <code>51.159.23.43 tcp/443</code> 23.10. 19:21 (Scaleway/Poney Telecom, außerhalb der drei Sets, einmalig). DNS 368 Anfragen, 36 erlaubte Namen: <code>hub.home.arpa</code> 181, <code>f-droid.org</code> + 14 Mirrors, <code>update.googleapis.com</code>, <code>edgedl.me.gvt1.com</code>, <code>my.</code>/<code>www.home-assistant.io</code>, <code>suggestqueries.google.com</code>, Browser-Startseiten (<code>www.google/twitter/facebook/yahoo</code>), <code>t0/t1.gstatic.com</code>, <code>raw.githubusercontent.com</code>, <code>version.pm2.io</code>; 133 geblockt (NTP-Namen vor der Umleitung, <code>eu-apia.coolkit.cc</code> 1× erlaubt um 18:14 <strong>vor</strong> der <code>$important</code>-Sperre, danach keine). 6× DoT an den Router (<code>tcp/853</code>, Android „Privates DNS automatisch")</td>
+<td>D9, D14, T4, T6</td>
+<td><strong>V7</strong> vorbereitet</td>
+</tr>
+<tr>
+<td>F12</td>
+<td><code>a-api.anthropic.com</code> 505× geblockt (<code>OP-S25</code>, HaGeZi Ultimate); <code>api.anthropic.com</code> 2.284× erlaubt (drei Geräte). Entscheidung V6 vom 22.10. offen</td>
+<td>D7, D8, D17</td>
+<td><strong>Entscheidung (V6)</strong></td>
+</tr>
+<tr>
+<td>F13</td>
+<td><strong>DoH/DoT-Namen:</strong> 63 Anfragen, 0 erlaubt — <code>cloudflare-dns.com</code> (OP-S25 22, OP-T41S 14), <code>dns.google(.com)</code> 11, <code>mozilla.cloudflare-dns.com</code> 8, Quad9 6, <code>dnsforge.de</code> 1. Browser-Sonden; in <code>private</code> ist DoH per IP bewusst offen (V7 17.10.)</td>
+<td>D10</td>
+<td>Bestätigung</td>
+</tr>
+<tr>
+<td>F14</td>
+<td><strong>Rauschen im Zonen-Log:</strong> Router-eigene DHCP-Antworten (<code>SRC=192.168.70.1 → 255.255.255.255 udp/67→68</code>, 12× <code>reject work in</code>; 1× <code>smarthome</code>) — Hairpin eigener Broadcasts, kein Client. <code>OP-T490</code> sendet Broadcasts <code>udp/1716</code> (KDE Connect), <code>udp/161</code> (SNMP), <code>udp/8610/8612</code> (Canon BJNP), <code>udp/3289</code></td>
+<td>T4</td>
+<td>Hinweis; Skript-Klasse für „eigene Adresse als Quelle" fehlt</td>
+</tr>
+<tr>
+<td>F15</td>
+<td><strong><code>wgvpn</code>:</strong> 116 Gateway-Pings <code>10.2.0.1</code>, 131 <code>invalid ct state</code> (Rückläufer abgelaufener Sitzungen, <code>OP-T41S</code>/<code>OP-S25</code>), 43 externe Quellen — Antwortseiten eigener Verbindungen (<code>82.220.37.2</code> 85 Ports = T41S-Sitzung), kein Scan</td>
+<td>T4, T7, T8</td>
+<td>Wie L2 (17.10.), V4 (17.10.) offen</td>
+</tr>
+<tr>
+<td>F16</td>
+<td><strong>AdGuard-TLS-Warnung beim Start:</strong> <code>tls_manager: validating certificate pair: certificate signed by unknown authority</code> (2×, beide Boots). <code>cert.pem</code> von der internen CA (Maßnahme D), die CA liegt nicht im Trust-Store des Routers; AdGuard bedient <code>9443</code> trotzdem (Warnung, kein Fehler)</td>
+<td>—</td>
+<td>Hinweis (V10, kosmetisch)</td>
+</tr>
+<tr>
+<td>F17</td>
+<td><strong>Admin-Tunnel:</strong> seit dem Boot nur der Laptop-Peer mit Handshake; Phone- und T41S-Peer 0 (nicht genutzt). C18 (Reboot-Test) damit für den Laptop zum zweiten Mal bestätigt, für die beiden anderen weiter offen</td>
+<td>—</td>
+<td>Bestätigung</td>
+</tr>
+<tr>
+<td>F18</td>
+<td><strong>Router-eigene Anfragen</strong> <code>hf.co</code>/<code>huggingface.co</code> (F16 22.10.) nur 21.10. 22:56, danach keine</td>
+<td>D14</td>
+<td>Erledigt (einmalig)</td>
+</tr>
+<tr>
+<td>F19</td>
+<td><strong>Volumen (nlbwmon, Oktober):</strong> WAN 37,5 GB ↓ / 5,4 GB ↑; TV 29,4 GB ↓ (Streaming), Work-Laptop 24,9/9,9 GB, T41S 19,5 GB, S25 11,1 GB, Hub 6,1 GB (334.610 Verbindungen — Tailscale/Polling), <strong>K1-DROID 2,3 MB</strong> (passt zum Private-DNS-Befund vom 18.10.: faktisch kein Verkehr), K2-iPhone15 1,1 GB, <code>.20.115</code> (<code>02:ec:4d:41:97:8e</code>) 50 KB</td>
+<td>—</td>
+<td>Neue Sichtbarkeitsquelle (S5)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="4-was-läuft-gut">4. Was läuft gut</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Nr.</th>
+<th>Nachweis</th>
+<th>Daten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G1</td>
+<td><strong>Egress-Policy je Zone:</strong> keine Zeile <code>Block-*-wan-dot</code>/<code>-doh</code>/<code>-uplink-all</code> in 61 h; DoT-Versuche enden am Router (<code>reject &lt;zone&gt; in</code>, TV 2, Panel 6+2); 63 DoH/DoT-Namensanfragen, 0 beantwortet</td>
+<td>T1, T4, D10</td>
+</tr>
+<tr>
+<td>G2</td>
+<td><strong>Management nur über <code>wgadm</code>:</strong> <code>OP-T490</code> → <code>192.168.30.1</code> <code>tcp/443</code> 3× und <code>tcp/22</code> 2× abgewiesen (<code>reject private in</code>, zuletzt 24.10. 10:24 — der eigene Versuch vor dem Tunnelstart)</td>
+<td>T4</td>
+</tr>
+<tr>
+<td>G3</td>
+<td><strong><code>private</code>-Pins:</strong> unbekanntes Gerät (F2) bekam kein DNS; <code>OP-S25</code> → Router <code>tcp/80</code> 3× abgewiesen</td>
+<td>T4</td>
+</tr>
+<tr>
+<td>G4</td>
+<td><strong><code>tv</code>-Pins:</strong> fremder Client <code>.50.238</code> am 22.10. ohne DNS vom Router (32 Abweisungen)</td>
+<td>T4</td>
+</tr>
+<tr>
+<td>G5</td>
+<td><strong>Panel:</strong> drei Kategorie-Sets reichen — 3 Block-Zeilen in 36 h, davon 2 Artefakt; Hub-Verkehr <code>tcp/8123</code> läuft über <code>Allow-panel-hub-ha</code></td>
+<td>T6</td>
+</tr>
+<tr>
+<td>G6</td>
+<td><strong>Default-Deny-IoT:</strong> Govee 4 erlaubt (<code>time.google.com</code>) / 366 geblockt; Voice-Assistants nur <code>firmware.esphome.io</code>; Nuki-Bridge nur <code>sse*-bridge.nuki.io</code>; <code>.10.189</code> (Panel vor Reservierung) 230/230 geblockt</td>
+<td>D9</td>
+</tr>
+<tr>
+<td>G7</td>
+<td><strong><code>.lan</code>-Leak geschlossen</strong> (F8)</td>
+<td>D12</td>
+</tr>
+<tr>
+<td>G8</td>
+<td><strong>Logvolumen:</strong> 20 Zeilen/h im Fenster, ≈ 10/h seit dem Umbau-Abend; 17 Limit-Minuten gesamt, keine davon sicherheitsrelevant; 0 SERVFAIL, Cache-Trefferquote 35,7 %</td>
+<td>T1, D16</td>
+</tr>
+<tr>
+<td>G9</td>
+<td><strong>Patch-Guard:</strong> stündlich (<code>17 * * * *</code>), 43/18, Patch-Dateien unverändert</td>
+<td>—</td>
+</tr>
+<tr>
+<td>G10</td>
+<td><strong>Keine Scan-Indikatoren:</strong> T8 enthält nur eigene Geräte und Antwortseiten</td>
+<td>T8</td>
+</tr>
+<tr>
+<td>G11</td>
+<td><strong><code>forward_kids</code>-Zähler</strong> seit dem Boot 0 auf allen Block-Regeln (keine Kinder-Geräte im Netz, kein Fremdverkehr aus <code>kids</code>)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="5-vorschläge-nachschärfen">5. Vorschläge (nachschärfen)</h2>
+<p>Reihenfolge nach Wirkung. AdGuard nur über die Oberfläche; Firewall je Vorschlag ein Schritt, ein Commit.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Nr.</th>
+<th>Ziel</th>
+<th>Änderung</th>
+<th>Risiko / Aufwand</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>V1</td>
+<td>Hub-Drops (F4, F5)</td>
+<td><strong>Umgesetzt 24.10. 13:13 (Whitelist, <code>ratelimit</code> bleibt 20).</strong> Ursprünglich: <code>ratelimit_whitelist</code> = <code>192.168.60.245</code> (GUI → DNS-Einstellungen). Dazu entscheiden, ob <code>ratelimit</code> von 20 auf 50/s geht (Admin-Geräte erreichen das Limit; <code>work</code> 88 s)</td>
+<td>GUI-Änderung, sofort messbar in D15</td>
+</tr>
+<tr>
+<td>V2</td>
+<td>Firmen-Namen am Upstream (F9)</td>
+<td>Benutzerregeln mit lokalem NXDOMAIN für Namen, die nur ein Firmen-Resolver kennt: <code>/^wpad\./$dnsrewrite=NXDOMAIN;;</code>, <code>/^_ldap\._tcp\./$dnsrewrite=NXDOMAIN;;</code>, <code>/^_autodiscover\._tcp\./$dnsrewrite=NXDOMAIN;;</code>, jeweils <code>$client=192.168.70.0/24</code>. Entfernt ≈ 2.600 Leaks je Arbeitstag (≈ 5.300 im Fenster; die erste Fassung nannte 4.700/Tag); Antwort bleibt NXDOMAIN wie heute. <strong>Umgesetzt 2026-10-24 11:45 (Operator), 1.44.12.</strong> Regex mit Anker, kein Catch-all</td>
+<td>Keins für den Laptop (bekommt dieselbe Antwort); <code>dns-filtering.md</code> A.3</td>
+</tr>
+<tr>
+<td>V3</td>
+<td>Inventar (F2)</td>
+<td><strong>Erledigt (Operator 24.10.):</strong> <code>02:dc:e2:be:bd:15</code> und <code>02:ec:4d:41:97:8e</code> (<code>.20.115</code>) waren beide <code>OP-S25</code> mit aktiver MAC-Randomisierung, inzwischen abgeschaltet. Verbleibende Handlungsanweisung für künftige Fälle: auf den Haushaltsgeräten „Private WLAN-Adresse" für die <code>private</code>-SSID prüfen (iOS: WLAN → (i) → Private Wi-Fi Address; Android: Netzwerkdetails → Datenschutz). Entweder Randomisierung für diese SSID aus und reservieren, oder bewusst ohne Dienste lassen (heute: WLAN ja, DNS/Internet nein)</td>
+<td>Operator, 10 Minuten</td>
+</tr>
+<tr>
+<td>V4</td>
+<td>Docker-NAT auf <code>OP-T490</code> (F3)</td>
+<td><strong>Erledigt 24.10.:</strong> Regel vorhanden, Ursache war ein einmaliges Race beim VPN-Trennen (F3). Ursprüngliche Prüfanweisung: <code>sudo iptables -t nat -S POSTROUTING | grep 172.21</code> bzw. <code>sudo nft list chain ip nat POSTROUTING</code>; fehlt die MASQUERADE-Regel für <code>172.21.0.0/16</code>, Docker-Daemon-Option <code>iptables</code>/<code>ip6tables</code> bzw. Backend (nftables vs. iptables-legacy) prüfen, Docker neu starten</td>
+<td>Laptop-seitig, kein Router</td>
+</tr>
+<tr>
+<td>V5</td>
+<td>Log-Rauschen (F9, F10, optional)</td>
+<td><code>Mute-work-wan-probe</code> (ICMP echo + <code>udp/33434-33534</code> → <code>wan</code>, <code>work_pins</code>) und <code>Mute-tv-wan-quic</code> (<code>udp/443</code>, <code>tv_pins</code>) nach dem Muster <code>Mute-work-wan-quic</code> — ohne Log, vor dem jeweiligen <code>Block-*-wan-all</code></td>
+<td>Kein Policy-Effekt, −390 Zeilen in diesem Fenster</td>
+</tr>
+<tr>
+<td>V6</td>
+<td>Claude-App (F12)</td>
+<td><strong>Unverändert V6 vom 22.10.:</strong> <code>@@||a-api.anthropic.com^$client=192.168.20.189</code> oder bewusst gesperrt lassen; in <code>dns-filtering.md</code> Teil B einstufen</td>
+<td>Nur Doku + eine Regel</td>
+</tr>
+<tr>
+<td>V7</td>
+<td>Panel-DNS (F11)</td>
+<td>Ab 26.10. Pauschalfreigabe <code>@@||*^$client=192.168.10.11</code> ersetzen durch: <code>@@||f-droid.org^</code>, Mirror-Liste aus D9 (14 Namen) <strong>oder</strong> <code>||*^$client=192.168.10.11</code> als Default-Deny plus F-Droid-Mirrors per Regex `/^(mirror</td>
+<td>mirrors</td>
+</tr>
+<tr>
+<td>V8</td>
+<td>Log-Lücke (F1)</td>
+<td><strong>Erledigt:</strong> Boots (Stromarbeiten) und Log-Löschung am 21.10. vom Operator am 24.10. bestätigt, beides beabsichtigt. Doku §13: „kein RTC — Zeilen der ersten Minute nach dem Boot tragen den letzten bekannten Zeitstempel, Marker <code>crond: time disparity</code>"; <code>logread</code>-Puffer überlebt keinen Boot (S1). CHANGELOG-Nachtrag für den 21.10., falls es ein bewusster Eingriff war</td>
+<td>Nur Doku</td>
+</tr>
+<tr>
+<td>V9</td>
+<td>Upstream-Latenz (F6)</td>
+<td>Wenn p99 &gt; 1 s im dritten Lauf bleibt: NextDNS-Status (<code>my.nextdns.io</code> → Logs/Latenz), <code>upstream_mode</code> <code>load_balance</code> → <code>parallel</code> mit Quad9 als zweitem Upstream erwägen (Policy: NextDNS-Profil filtert; Quad9 nur Fallback)</td>
+<td>GUI; Policy-Entscheidung</td>
+</tr>
+<tr>
+<td>V10</td>
+<td>AdGuard-TLS-Warnung (F16)</td>
+<td>Interne CA nach <code>/etc/ssl/certs/</code> (<code>ca-certificates</code>-Pfad) auf dem Router, oder Warnung dokumentiert hinnehmen</td>
+<td>Kosmetisch</td>
+</tr>
+<tr>
+<td>V11</td>
+<td>Audit-Skripte</td>
+<td><code>dnslog-audit.py</code>: fehlende <code>querylog.json.1</code> tolerieren (seit 22.10. bekannt); <code>fwlog-audit.py</code>: Klasse „eigene Adresse als Quelle" (F14), Label <code>192.168.5.221</code> ≠ Uplink; beide: Boot-Marker und <code>time disparity</code> ausweisen</td>
+<td>Skript, ein Commit</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="6-wo-sichtbarkeit-fehlt">6. Wo Sichtbarkeit fehlt</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Nr.</th>
+<th>Lücke</th>
+<th>Folge im Fenster</th>
+<th>Hebel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1</td>
+<td><strong>Kein Remote-Syslog.</strong> Logs liegen nur auf dem Router (NVMe + RAM-Puffer); lokal löschbar, Boot verliert den Puffer</td>
+<td>18.–21.10. unwiederbringlich weg; zwei Logs am 21.10. ohne Spur geleert</td>
+<td>Syslog-Host (Maßnahme A, X250) — <code>logd</code> kann parallel per <code>log_ip</code>/<code>log_port</code> senden</td>
+</tr>
+<tr>
+<td>S2</td>
+<td><strong>AdGuard-Rate-Limit verwirft stumm</strong></td>
+<td>544 s (Hub) + 88 s (Work) + 9 s (private) am Limit, Anzahl verworfener Anfragen unbekannt</td>
+<td>V1; AdGuard loggt Drops nicht, nur <code>ratelimit_whitelist</code> macht sie sichtbar</td>
+</tr>
+<tr>
+<td>S3</td>
+<td><strong>Keine RTC</strong></td>
+<td>Erste ~90 s nach jedem Boot falsch gestempelt; Audit-Skripte sortieren sie in den falschen Tag; Boot-Zählung am 22.10. deshalb falsch</td>
+<td>Doku (V8), Skript-Marker (V11); Hardware nicht änderbar</td>
+</tr>
+<tr>
+<td>S4</td>
+<td><strong>Query-Log ohne <code>.1</code></strong> seit dem Leeren; Skript bricht ohne die Datei ab</td>
+<td>Umweg über gzip-Kopie</td>
+<td>V11</td>
+</tr>
+<tr>
+<td>S5</td>
+<td><strong>Erlaubter Verkehr ist unsichtbar</strong> (nur Panel-Allows loggen) — <code>nlbwmon</code> läuft seit 10.10. mit Monats-DB auf der NVMe, wurde bisher nicht ausgewertet</td>
+<td>F19 zeigt, was möglich ist: Volumen je Gerät, Verbindungsanzahl (Hub 334.610)</td>
+<td><code>nlbw -c show -g mac,ip</code> in den Audit-Turnus aufnehmen; <code>database_generations</code> 10 reicht für 10 Monate</td>
+</tr>
+<tr>
+<td>S6</td>
+<td><strong><code>kids</code> ohne Verkehr im Fenster</strong></td>
+<td>K1-DROID-Befund vom 18.10. (Private DNS → kein DNS) nicht nachgeprüft; nlbwmon: 2,3 MB im ganzen Oktober</td>
+<td>Beim nächsten Besuch: Private DNS aus, dann D4/T6 für <code>.40.218</code> prüfen</td>
+</tr>
+<tr>
+<td>S7</td>
+<td><strong>DNS-Pfad <code>.50.238</code> → AdGuard</strong> (F5 22.10.)</td>
+<td>16 AnyDesk-Anfragen kamen an, 32 wurden abgewiesen; Zonen-Log 10/min verdeckt den Rest</td>
+<td>Beim nächsten <code>tv</code>-Besuch des Laptops: <code>conntrack -L | grep 50.238</code> live</td>
+</tr>
+<tr>
+<td>S8</td>
+<td><strong>Log-Limits</strong> 6/min je Block-Regel, 10/min je Zone</td>
+<td>17 Limit-Minuten → in diesen Minuten fehlen Zeilen (Work-Sonden, Hub→Panel)</td>
+<td>V5 senkt die Treffer; Limit nicht anheben (Logvolumen)</td>
+</tr>
+<tr>
+<td>S9</td>
+<td><strong>HA-Ereignisse nicht im Router-Log</strong></td>
+<td>Hub→Panel-Rückläufer (F7) nur zeitlich mit HA-Neustart korrelierbar</td>
+<td>HA-SSH-Key (offen seit 17.10.) → <code>ha core logs</code> im Audit</td>
+</tr>
+<tr>
+<td>S10</td>
+<td><strong>AdGuard-Client-Schalter</strong> (<code>filtering_enabled: false</code> bei 8 Clients wirkungslos, alle „globale Einstellungen")</td>
+<td>Falle bleibt (N14 17.10., F15 22.10.)</td>
+<td>Doku-Hinweis in <code>dns-filtering.md</code> A.1, keine Änderung</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="7-methode">7. Methode</h2>
+<p><code>scripts/fwlog-audit.py 1.0.0</code> (SSH, <code>cat</code> des Logs, <code>uci export</code>), <code>scripts/dnslog-audit.py 1.0.0</code> (<code>gzip -c querylog.json</code> → <code>--querylog</code>, da <code>.1</code> fehlt). Ergänzend auf dem Router: <code>logread</code>, <code>/proc/uptime</code>, <code>ls --full-time /mnt/nvme/*</code>, <code>mount</code>, <code>head -c 60 querylog.json</code>, <code>cat /etc/init.d/nvme-guard</code>, <code>grep</code> auf <code>time disparity</code>/<code>init complete</code>/<code>AP-STA-CONNECTED</code>/<code>DHCPACK</code>, <code>nft list chain inet fw4 forward_kids</code>, <code>wg show wgadm latest-handshakes</code>, <code>/etc/fw4-multi-ipset/guard.sh report</code>, <code>nlbw -c show -g mac,ip</code>, <code>nslookup</code>, AdGuard-YAML nur die Abschnitte <code>ratelimit*</code>, <code>upstream_dns</code>, <code>fallback_dns</code>, <code>user_rules</code> (grep), <code>tls</code> (Pfade). Keine Änderung am Gerät. Firmen-/Kundendomänen in den Anhängen durch Platzhalter ersetzt.</p>
+<h2 id="anhang-a-firewall-log-tabellen-generiert-fenster-2110-2124--2410-1026">Anhang A: Firewall-Log-Tabellen (generiert, Fenster 21.10. 21:24 – 24.10. 10:26)</h2>
+<!-- generated by scripts/fwlog-audit.py 1.0.0, source root@192.168.30.1, window 2026-10-18 00:00:00 .. 2026-10-24 10:26:07, 1240 firewall lines -->
+
+<h4 id="t1-zeilen-je-log-klasse">T1 Zeilen je Log-Klasse</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Präfix</th>
+<th>Klasse</th>
+<th>Zeilen</th>
+<th>Anteil</th>
+<th>erste</th>
+<th>letzte</th>
+<th>max/min</th>
+<th>Limit/min</th>
+<th>Minuten am Limit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Block-work-wan-all</code></td>
+<td>rule</td>
+<td>332</td>
+<td>26.8 %</td>
+<td>21.10. 21:24</td>
+<td>23.10. 16:58</td>
+<td>10</td>
+<td>6</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>reject wgvpn in</code></td>
+<td>zone-in</td>
+<td>282</td>
+<td>22.7 %</td>
+<td>21.10. 21:34</td>
+<td>23.10. 21:46</td>
+<td>12</td>
+<td>10</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>invalid</td>
+<td>131</td>
+<td>10.6 %</td>
+<td>21.10. 22:30</td>
+<td>23.10. 22:50</td>
+<td>7</td>
+<td>-</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>Allow-panel-wan-all</code></td>
+<td>other</td>
+<td>131</td>
+<td>10.6 %</td>
+<td>22.10. 18:38</td>
+<td>22.10. 22:41</td>
+<td>14</td>
+<td>-</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>Block-tv-wan-all</code></td>
+<td>rule</td>
+<td>103</td>
+<td>8.3 %</td>
+<td>21.10. 21:28</td>
+<td>22.10. 21:57</td>
+<td>6</td>
+<td>6</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>reject smarthome_srv forward</code></td>
+<td>zone-fwd</td>
+<td>62</td>
+<td>5.0 %</td>
+<td>22.10. 19:25</td>
+<td>23.10. 08:51</td>
+<td>14</td>
+<td>10</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>Block-iotsrv-wan-all</code></td>
+<td>rule</td>
+<td>50</td>
+<td>4.0 %</td>
+<td>22.10. 19:25</td>
+<td>23.10. 08:51</td>
+<td>10</td>
+<td>6</td>
+<td>5</td>
+</tr>
+<tr>
+<td><code>reject tv in</code></td>
+<td>zone-in</td>
+<td>34</td>
+<td>2.7 %</td>
+<td>22.10. 16:45</td>
+<td>22.10. 19:14</td>
+<td>10</td>
+<td>10</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>Allow-panel-hub-ha</code></td>
+<td>other</td>
+<td>31</td>
+<td>2.5 %</td>
+<td>22.10. 19:06</td>
+<td>22.10. 20:48</td>
+<td>4</td>
+<td>-</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>reject private forward</code></td>
+<td>zone-fwd</td>
+<td>27</td>
+<td>2.2 %</td>
+<td>22.10. 12:22</td>
+<td>24.10. 10:26</td>
+<td>7</td>
+<td>10</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>reject private in</code></td>
+<td>zone-in</td>
+<td>21</td>
+<td>1.7 %</td>
+<td>21.10. 22:30</td>
+<td>24.10. 10:24</td>
+<td>5</td>
+<td>10</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>reject work in</code></td>
+<td>zone-in</td>
+<td>12</td>
+<td>1.0 %</td>
+<td>22.10. 08:44</td>
+<td>23.10. 08:58</td>
+<td>3</td>
+<td>10</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>reject smarthome in</code></td>
+<td>zone-in</td>
+<td>9</td>
+<td>0.7 %</td>
+<td>22.10. 17:39</td>
+<td>22.10. 18:47</td>
+<td>3</td>
+<td>10</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>Block-iot-wan-all</code></td>
+<td>rule</td>
+<td>9</td>
+<td>0.7 %</td>
+<td>22.10. 18:58</td>
+<td>22.10. 19:00</td>
+<td>5</td>
+<td>6</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>reject smarthome forward</code></td>
+<td>zone-fwd</td>
+<td>3</td>
+<td>0.2 %</td>
+<td>22.10. 18:58</td>
+<td>22.10. 18:59</td>
+<td>2</td>
+<td>10</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>Block-panel-wan-all</code></td>
+<td>rule</td>
+<td>3</td>
+<td>0.2 %</td>
+<td>22.10. 22:52</td>
+<td>23.10. 19:21</td>
+<td>2</td>
+<td>6</td>
+<td>0</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>Minuten am Limit</code>: Minuten, in denen so viele Zeilen wie das Limit erlaubt geschrieben wurden; in diesen Minuten sind weitere Treffer <strong>nicht</strong> im Log (Dunkelziffer).</p>
+<h4 id="t2-zeilen-je-tag-und-klasse">T2 Zeilen je Tag und Klasse</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>zone-in</th>
+<th>zone-fwd</th>
+<th>collective</th>
+<th>rule</th>
+<th>invalid</th>
+<th>zone-out</th>
+<th>other</th>
+<th>gesamt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wed 21.10.</td>
+<td>34</td>
+<td>0</td>
+<td>0</td>
+<td>52</td>
+<td>56</td>
+<td>0</td>
+<td>0</td>
+<td>142</td>
+</tr>
+<tr>
+<td>Thu 22.10.</td>
+<td>169</td>
+<td>67</td>
+<td>0</td>
+<td>303</td>
+<td>34</td>
+<td>0</td>
+<td>162</td>
+<td>735</td>
+</tr>
+<tr>
+<td>Fri 23.10.</td>
+<td>154</td>
+<td>24</td>
+<td>0</td>
+<td>142</td>
+<td>41</td>
+<td>0</td>
+<td>0</td>
+<td>361</td>
+</tr>
+<tr>
+<td>Sat 24.10.</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>2</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="t3-tagesprofil-zeilen-je-stunde-summe-über-die-tage">T3 Tagesprofil (Zeilen je Stunde, Summe über die Tage)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Klasse</th>
+<th>00</th>
+<th>01</th>
+<th>02</th>
+<th>03</th>
+<th>04</th>
+<th>05</th>
+<th>06</th>
+<th>07</th>
+<th>08</th>
+<th>09</th>
+<th>10</th>
+<th>11</th>
+<th>12</th>
+<th>13</th>
+<th>14</th>
+<th>15</th>
+<th>16</th>
+<th>17</th>
+<th>18</th>
+<th>19</th>
+<th>20</th>
+<th>21</th>
+<th>22</th>
+<th>23</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gesamt</td>
+<td>23</td>
+<td>30</td>
+<td>12</td>
+<td>16</td>
+<td>6</td>
+<td>5</td>
+<td>12</td>
+<td>1</td>
+<td>72</td>
+<td>60</td>
+<td>40</td>
+<td>48</td>
+<td>68</td>
+<td>39</td>
+<td>65</td>
+<td>38</td>
+<td>117</td>
+<td>53</td>
+<td>79</td>
+<td>139</td>
+<td>27</td>
+<td>113</td>
+<td>153</td>
+<td>24</td>
+</tr>
+<tr>
+<td>zone-in</td>
+<td>19</td>
+<td>29</td>
+<td>5</td>
+<td>7</td>
+<td>4</td>
+<td>2</td>
+<td>0</td>
+<td>0</td>
+<td>15</td>
+<td>12</td>
+<td>2</td>
+<td>12</td>
+<td>10</td>
+<td>7</td>
+<td>18</td>
+<td>4</td>
+<td>69</td>
+<td>27</td>
+<td>14</td>
+<td>15</td>
+<td>14</td>
+<td>28</td>
+<td>30</td>
+<td>15</td>
+</tr>
+<tr>
+<td>rule</td>
+<td>2</td>
+<td>0</td>
+<td>2</td>
+<td>2</td>
+<td>2</td>
+<td>3</td>
+<td>11</td>
+<td>0</td>
+<td>34</td>
+<td>38</td>
+<td>36</td>
+<td>34</td>
+<td>47</td>
+<td>32</td>
+<td>36</td>
+<td>30</td>
+<td>39</td>
+<td>14</td>
+<td>16</td>
+<td>35</td>
+<td>2</td>
+<td>45</td>
+<td>29</td>
+<td>8</td>
+</tr>
+<tr>
+<td>zone-fwd</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>15</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>7</td>
+<td>0</td>
+<td>9</td>
+<td>0</td>
+<td>0</td>
+<td>5</td>
+<td>4</td>
+<td>18</td>
+<td>0</td>
+<td>19</td>
+<td>14</td>
+<td>0</td>
+</tr>
+<tr>
+<td>collective</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>invalid</td>
+<td>2</td>
+<td>1</td>
+<td>5</td>
+<td>7</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>8</td>
+<td>10</td>
+<td>1</td>
+<td>2</td>
+<td>4</td>
+<td>0</td>
+<td>2</td>
+<td>4</td>
+<td>9</td>
+<td>7</td>
+<td>3</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>62</td>
+<td>1</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="t4-input-abweisungen-je-zone-reject-zone-in-quelle--router-adresse-dienst">T4 INPUT-Abweisungen je Zone (<code>reject &lt;zone&gt; in</code>): Quelle → Router-Adresse, Dienst</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Zone</th>
+<th>Quelle</th>
+<th>Ziel</th>
+<th>Dienst</th>
+<th>Zeilen</th>
+<th>Anteil in Zone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>private</td>
+<td>192.168.20.217</td>
+<td>192.168.20.1 (Router (private))</td>
+<td>udp/53 (DNS)</td>
+<td>6</td>
+<td>28.6 %</td>
+</tr>
+<tr>
+<td>private</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>255.255.255.255 (Broadcast)</td>
+<td>udp/1716</td>
+<td>6</td>
+<td>28.6 %</td>
+</tr>
+<tr>
+<td>private</td>
+<td>192.168.20.189 (OP-S25)</td>
+<td>192.168.20.1 (Router (private))</td>
+<td>tcp/80 (HTTP)</td>
+<td>3</td>
+<td>14.3 %</td>
+</tr>
+<tr>
+<td>private</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>192.168.30.1 (Router (management))</td>
+<td>tcp/443 (HTTPS)</td>
+<td>3</td>
+<td>14.3 %</td>
+</tr>
+<tr>
+<td>private</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>255.255.255.255 (Broadcast)</td>
+<td>udp/3289</td>
+<td>1</td>
+<td>4.8 %</td>
+</tr>
+<tr>
+<td>private</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>255.255.255.255 (Broadcast)</td>
+<td>udp/1124</td>
+<td>1</td>
+<td>4.8 %</td>
+</tr>
+<tr>
+<td>private</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>192.168.30.1 (Router (management))</td>
+<td>tcp/22 (SSH)</td>
+<td>1</td>
+<td>4.8 %</td>
+</tr>
+<tr>
+<td>smarthome</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>192.168.10.1 (Router (smarthome))</td>
+<td>tcp/853 (DoT)</td>
+<td>6</td>
+<td>66.7 %</td>
+</tr>
+<tr>
+<td>smarthome</td>
+<td>192.168.10.189</td>
+<td>192.168.10.1 (Router (smarthome))</td>
+<td>tcp/853 (DoT)</td>
+<td>2</td>
+<td>22.2 %</td>
+</tr>
+<tr>
+<td>smarthome</td>
+<td>192.168.10.1 (Router (smarthome))</td>
+<td>255.255.255.255 (Broadcast)</td>
+<td>udp/68 (DHCP-Client)</td>
+<td>1</td>
+<td>11.1 %</td>
+</tr>
+<tr>
+<td>tv</td>
+<td>192.168.50.238</td>
+<td>192.168.50.1 (Router (tv))</td>
+<td>udp/53 (DNS)</td>
+<td>20</td>
+<td>58.8 %</td>
+</tr>
+<tr>
+<td>tv</td>
+<td>192.168.50.238</td>
+<td>192.168.50.1 (Router (tv))</td>
+<td>tcp/53 (DNS)</td>
+<td>12</td>
+<td>35.3 %</td>
+</tr>
+<tr>
+<td>tv</td>
+<td>192.168.50.158 (TV)</td>
+<td>192.168.50.1 (Router (tv))</td>
+<td>tcp/853 (DoT)</td>
+<td>2</td>
+<td>5.9 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>10.2.0.1</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>echo-request</td>
+<td>116</td>
+<td>41.1 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>3.124.167.37</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/40944</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>82.220.37.2</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/37305</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>63.187.216.73</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/57006</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>82.220.37.2</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/55851</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>3.123.248.102</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/39216</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>3.125.141.80</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/42758</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>161.69.245.10</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/33554</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>161.69.245.5</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/46484</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>161.69.245.5</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/41528</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>52.57.41.49</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/41396</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>wgvpn</td>
+<td>63.184.38.189</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>tcp/36430</td>
+<td>2</td>
+<td>0.7 %</td>
+</tr>
+<tr>
+<td>work</td>
+<td>192.168.70.1 (Router (work))</td>
+<td>255.255.255.255 (Broadcast)</td>
+<td>udp/68 (DHCP-Client)</td>
+<td>12</td>
+<td>100.0 %</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="t5-abweisungen-zwischen-zonen-forward-ohne-regel-zonen-log--sammelzeile">T5 Abweisungen zwischen Zonen (FORWARD ohne Regel: Zonen-Log + Sammelzeile)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>von Zone</th>
+<th>nach Zone</th>
+<th>Quelle</th>
+<th>Ziel</th>
+<th>Dienst</th>
+<th>Präfix</th>
+<th>Zeilen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35550</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35546</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td>private</td>
+<td>wan</td>
+<td>172.21.0.2</td>
+<td>160.79.104.10</td>
+<td>tcp/443 (HTTPS)</td>
+<td><code>reject private forward</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35656</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>6</td>
+</tr>
+<tr>
+<td>private</td>
+<td>smarthome</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>192.168.10.189</td>
+<td>echo-request</td>
+<td><code>reject private forward</code></td>
+<td>5</td>
+</tr>
+<tr>
+<td>private</td>
+<td>smarthome</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/80 (HTTP)</td>
+<td><code>reject private forward</code></td>
+<td>5</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35688</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>5</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35684</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>5</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35522</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>4</td>
+</tr>
+<tr>
+<td>private</td>
+<td>wan</td>
+<td>192.168.20.189 (OP-S25)</td>
+<td>192.168.178.27</td>
+<td>udp/50004</td>
+<td><code>reject private forward</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>smarthome</td>
+<td>smarthome_srv</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>tcp/443 (HTTPS)</td>
+<td><code>reject smarthome forward</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35532</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35658</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35652</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35686</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>private</td>
+<td>wan</td>
+<td>192.168.20.189 (OP-S25)</td>
+<td>192.168.178.27</td>
+<td>udp/50030</td>
+<td><code>reject private forward</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>private</td>
+<td>wan</td>
+<td>192.168.20.189 (OP-S25)</td>
+<td>192.168.178.27</td>
+<td>udp/50046</td>
+<td><code>reject private forward</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35526</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35524</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35530</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35660</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>smarthome</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35682</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td>private</td>
+<td>smarthome</td>
+<td>192.168.20.238 (OP-T490)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>echo-request</td>
+<td><code>reject private forward</code></td>
+<td>1</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>private</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.20.189 (OP-S25)</td>
+<td>tcp/54210</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>1</td>
+</tr>
+</tbody>
+</table></div>
+<p>Zonen-Paare gesamt: smarthome_srv→smarthome 61, private→wan 16, private→smarthome 11, smarthome→smarthome_srv 3, smarthome_srv→private 1</p>
+<h4 id="t6-egress-blocks-je-regel-block--quelle-ziel-dienst">T6 Egress-Blocks je Regel (<code>Block-*</code>): Quelle, Ziel, Dienst</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Regel</th>
+<th>Zeilen</th>
+<th>Protokolle</th>
+<th>Ziel-IPs</th>
+<th>Quelle</th>
+<th>Ziel</th>
+<th>Dienst × Zeilen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Block-work-wan-all</code></td>
+<td>332</td>
+<td>UDP 163 ICMP 143 TCP 26</td>
+<td>20</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>147.161.139.245</td>
+<td>echo-request ×70</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>147.161.139.245</td>
+<td>udp/33434 ×70</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>165.225.25.237</td>
+<td>echo-request ×47</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>165.225.25.237</td>
+<td>udp/33434 ×47</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>87.58.122.21</td>
+<td>echo-request ×8</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>87.58.122.21</td>
+<td>udp/33434 ×8</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>192.168.5.221</td>
+<td>tcp/8443 (Uplink-LuCI) ×8</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>192.168.178.27</td>
+<td>udp/50012 ×6</td>
+</tr>
+<tr>
+<td><code>Block-tv-wan-all</code></td>
+<td>103</td>
+<td>UDP 84 TCP 19</td>
+<td>31</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.115.4</td>
+<td>udp/443 (HTTPS) ×10</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>142.251.150.120</td>
+<td>udp/443 (HTTPS) ×9</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.19.174</td>
+<td>udp/443 (HTTPS) ×8</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.118.4</td>
+<td>udp/443 (HTTPS) ×7</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.116.4</td>
+<td>udp/443 (HTTPS) ×7</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>142.251.143.14</td>
+<td>udp/443 (HTTPS) ×6</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.113.4</td>
+<td>udp/443 (HTTPS) ×6</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.112.4</td>
+<td>udp/443 (HTTPS) ×6</td>
+</tr>
+<tr>
+<td><code>Block-iotsrv-wan-all</code></td>
+<td>50</td>
+<td>TCP 50</td>
+<td>2</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35550 ×8</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35546 ×8</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35656 ×5</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35686 ×5</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35688 ×4</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35522 ×3</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35652 ×3</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35524 ×2</td>
+</tr>
+<tr>
+<td><code>Block-iot-wan-all</code></td>
+<td>9</td>
+<td>TCP 9</td>
+<td>1</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>tcp/443 (HTTPS) ×9</td>
+</tr>
+<tr>
+<td><code>Block-panel-wan-all</code></td>
+<td>3</td>
+<td>TCP 3</td>
+<td>2</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>tcp/8123 (Home Assistant) ×2</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>51.159.23.43</td>
+<td>tcp/443 (HTTPS) ×1</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="t7-tunnel-eingang-wgvpn-input-abweisungen-und-invalid-ct-state">T7 Tunnel-Eingang <code>wgvpn</code> (INPUT-Abweisungen und <code>invalid ct state</code>)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Präfix</th>
+<th>Quelle (extern)</th>
+<th>Ziel</th>
+<th>Dienst</th>
+<th>Zeilen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reject wgvpn in</code></td>
+<td>10.2.0.1</td>
+<td>10.2.0.2 (Router (wgvpn))</td>
+<td>echo-request</td>
+<td>116</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111</td>
+<td>34.104.35.123</td>
+<td>tcp/80 (HTTP)</td>
+<td>24</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.189</td>
+<td>82.220.37.2</td>
+<td>tcp/443 (HTTPS)</td>
+<td>17</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111</td>
+<td>172.217.116.4</td>
+<td>tcp/443 (HTTPS)</td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.189</td>
+<td>23.50.131.222</td>
+<td>tcp/443 (HTTPS)</td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.189</td>
+<td>23.207.210.132</td>
+<td>tcp/443 (HTTPS)</td>
+<td>6</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.189</td>
+<td>172.217.118.4</td>
+<td>tcp/443 (HTTPS)</td>
+<td>6</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111</td>
+<td>160.79.104.10</td>
+<td>tcp/443 (HTTPS)</td>
+<td>5</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111</td>
+<td>172.217.119.4</td>
+<td>tcp/443 (HTTPS)</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111</td>
+<td>172.217.118.4</td>
+<td>tcp/443 (HTTPS)</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111</td>
+<td>142.250.203.206</td>
+<td>tcp/443 (HTTPS)</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111</td>
+<td>172.217.112.4</td>
+<td>tcp/443 (HTTPS)</td>
+<td>4</td>
+</tr>
+</tbody>
+</table></div>
+<p>verschiedene externe Quellen: 43; Ziel-Ports (udp/tcp) verschieden: 159</p>
+<h4 id="t8-scan-indikatoren-quellen-mit-vielen-verschiedenen-ziel-ports-oder-ziel-hosts">T8 Scan-Indikatoren: Quellen mit vielen verschiedenen Ziel-Ports oder Ziel-Hosts</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Quelle</th>
+<th>Zeilen</th>
+<th>Ziel-Ports verschieden</th>
+<th>max Ports in 10 min</th>
+<th>Ziel-Hosts verschieden</th>
+<th>Präfixe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>82.220.37.2</td>
+<td>87</td>
+<td>85</td>
+<td>1</td>
+<td>1</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>192.168.60.245 (homeassistant)</td>
+<td>112</td>
+<td>17</td>
+<td>7</td>
+<td>2</td>
+<td>Block-iotsrv-wan-all, reject smarthome_srv forward</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>332</td>
+<td>11</td>
+<td>4</td>
+<td>20</td>
+<td>Block-work-wan-all</td>
+</tr>
+<tr>
+<td>192.168.50.158 (TV)</td>
+<td>92</td>
+<td>3</td>
+<td>2</td>
+<td>29</td>
+<td>Block-tv-wan-all, reject tv in</td>
+</tr>
+<tr>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>183</td>
+<td>3</td>
+<td>2</td>
+<td>24</td>
+<td>Allow-panel-hub-ha, Allow-panel-wan-all, Block-iot-wan-all, Block-panel-wan-all, reject smarthome forward, reject smarthome in</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="t9-nur-an-einem-tag-gesehene-quelleziel-paare--5-zeilen">T9 Nur an einem Tag gesehene Quelle→Ziel-Paare (≥ 5 Zeilen)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Präfix</th>
+<th>Quelle</th>
+<th>Ziel</th>
+<th>Dienst</th>
+<th>Zeilen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>22.10.</td>
+<td><code>Allow-panel-wan-all</code></td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>tcp/8123 (Home Assistant)</td>
+<td>79</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-work-wan-all</code></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>147.161.139.245</td>
+<td>echo-request</td>
+<td>70</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-work-wan-all</code></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>147.161.139.245</td>
+<td>udp/33434</td>
+<td>70</td>
+</tr>
+<tr>
+<td>23.10.</td>
+<td><code>Block-work-wan-all</code></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>165.225.25.237</td>
+<td>echo-request</td>
+<td>47</td>
+</tr>
+<tr>
+<td>23.10.</td>
+<td><code>Block-work-wan-all</code></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>165.225.25.237</td>
+<td>udp/33434</td>
+<td>47</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Allow-panel-hub-ha</code></td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>tcp/8123 (Home Assistant)</td>
+<td>31</td>
+</tr>
+<tr>
+<td>21.10.</td>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>34.104.35.123</td>
+<td>tcp/80 (HTTP)</td>
+<td>24</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>reject tv in</code></td>
+<td>192.168.50.238</td>
+<td>192.168.50.1 (Router (tv))</td>
+<td>udp/53 (DNS)</td>
+<td>20</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Allow-panel-wan-all</code></td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>142.251.143.14</td>
+<td>tcp/443 (HTTPS)</td>
+<td>18</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>reject tv in</code></td>
+<td>192.168.50.238</td>
+<td>192.168.50.1 (Router (tv))</td>
+<td>tcp/53 (DNS)</td>
+<td>12</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-tv-wan-all</code></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.115.4</td>
+<td>udp/443 (HTTPS)</td>
+<td>10</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-iot-wan-all</code></td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>tcp/443 (HTTPS)</td>
+<td>9</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35550</td>
+<td>9</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>reject smarthome_srv forward</code></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35546</td>
+<td>9</td>
+</tr>
+<tr>
+<td>23.10.</td>
+<td><code>reject private forward</code></td>
+<td>172.21.0.2</td>
+<td>160.79.104.10</td>
+<td>tcp/443 (HTTPS)</td>
+<td>9</td>
+</tr>
+<tr>
+<td>21.10.</td>
+<td><code>Block-work-wan-all</code></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>87.58.122.21</td>
+<td>echo-request</td>
+<td>8</td>
+</tr>
+<tr>
+<td>21.10.</td>
+<td><code>Block-work-wan-all</code></td>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>87.58.122.21</td>
+<td>udp/33434</td>
+<td>8</td>
+</tr>
+<tr>
+<td>21.10.</td>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>172.217.116.4</td>
+<td>tcp/443 (HTTPS)</td>
+<td>8</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-tv-wan-all</code></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.19.174</td>
+<td>udp/443 (HTTPS)</td>
+<td>8</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>drop wgvpn invalid ct state</code></td>
+<td>192.168.20.189 (OP-S25)</td>
+<td>23.50.131.222</td>
+<td>tcp/443 (HTTPS)</td>
+<td>8</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-iotsrv-wan-all</code></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35550</td>
+<td>8</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-iotsrv-wan-all</code></td>
+<td>192.168.60.245 (homeassistant)</td>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>tcp/35546</td>
+<td>8</td>
+</tr>
+<tr>
+<td>21.10.</td>
+<td><code>reject private in</code></td>
+<td>192.168.20.217</td>
+<td>192.168.20.1 (Router (private))</td>
+<td>udp/53 (DNS)</td>
+<td>6</td>
+</tr>
+<tr>
+<td>22.10.</td>
+<td><code>Block-tv-wan-all</code></td>
+<td>192.168.50.158 (TV)</td>
+<td>172.217.112.4</td>
+<td>udp/443 (HTTPS)</td>
+<td>6</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="t10-alle-quellen-mit-zeilenanzahl-ohne-invalid">T10 Alle Quellen mit Zeilenanzahl (ohne <code>invalid</code>)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Quelle</th>
+<th>Zeilen</th>
+<th>Anteil</th>
+<th>Präfixe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>332</td>
+<td>26.8 %</td>
+<td>Block-work-wan-all</td>
+</tr>
+<tr>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>183</td>
+<td>14.8 %</td>
+<td>Allow-panel-hub-ha, Allow-panel-wan-all, Block-iot-wan-all, Block-panel-wan-all, reject smarthome forward, reject smarthome in</td>
+</tr>
+<tr>
+<td>10.2.0.1</td>
+<td>116</td>
+<td>9.4 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>192.168.60.245 (homeassistant)</td>
+<td>112</td>
+<td>9.0 %</td>
+<td>Block-iotsrv-wan-all, reject smarthome_srv forward</td>
+</tr>
+<tr>
+<td>192.168.50.158 (TV)</td>
+<td>92</td>
+<td>7.4 %</td>
+<td>Block-tv-wan-all, reject tv in</td>
+</tr>
+<tr>
+<td>82.220.37.2</td>
+<td>87</td>
+<td>7.0 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>192.168.50.238</td>
+<td>45</td>
+<td>3.6 %</td>
+<td>Block-tv-wan-all, reject tv in</td>
+</tr>
+<tr>
+<td>192.168.20.238 (OP-T490)</td>
+<td>23</td>
+<td>1.9 %</td>
+<td>reject private forward, reject private in</td>
+</tr>
+<tr>
+<td>146.75.121.91</td>
+<td>12</td>
+<td>1.0 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>192.168.70.1 (Router (work))</td>
+<td>12</td>
+<td>1.0 %</td>
+<td>reject work in</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>10</td>
+<td>0.8 %</td>
+<td>reject private forward, reject private in</td>
+</tr>
+<tr>
+<td>172.21.0.2</td>
+<td>9</td>
+<td>0.7 %</td>
+<td>reject private forward</td>
+</tr>
+<tr>
+<td>192.168.20.217</td>
+<td>6</td>
+<td>0.5 %</td>
+<td>reject private in</td>
+</tr>
+<tr>
+<td>160.79.104.10</td>
+<td>5</td>
+<td>0.4 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>13.226.155.79</td>
+<td>4</td>
+<td>0.3 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>161.69.245.5</td>
+<td>4</td>
+<td>0.3 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>54.195.140.245</td>
+<td>3</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>99.80.128.60</td>
+<td>3</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>63.184.38.189</td>
+<td>3</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>89.31.137.221</td>
+<td>3</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>3.124.167.37</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>35.158.78.150</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>63.187.216.73</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>23.207.210.132</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>34.247.205.63</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>3.123.248.102</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>192.168.10.189</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject smarthome in</td>
+</tr>
+<tr>
+<td>3.125.141.80</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>161.69.245.10</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>108.132.52.37</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>3.248.147.52</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>52.57.41.49</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>51.81.92.24</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>52.210.61.139</td>
+<td>2</td>
+<td>0.2 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>13.226.155.51</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>63.182.85.211</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>34.253.249.14</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>18.173.233.116</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>54.230.172.58</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>18.173.233.13</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>18.202.121.53</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>63.183.37.214</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>23.50.131.222</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>35.162.253.124</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>192.168.10.1 (Router (smarthome))</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject smarthome in</td>
+</tr>
+<tr>
+<td>40.180.194.125</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>23.103.241.71</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>13.226.155.90</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>44.238.40.20</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>13.226.155.96</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+<tr>
+<td>92.123.104.34</td>
+<td>1</td>
+<td>0.1 %</td>
+<td>reject wgvpn in</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="anhang-b-adguard-query-log-tabellen-generiert-fenster-2110-2114--2410-1024">Anhang B: AdGuard-Query-Log-Tabellen (generiert, Fenster 21.10. 21:14 – 24.10. 10:24)</h2>
+<!-- generated by scripts/dnslog-audit.py 1.0.0, source <scratch>/querylog.json.gz, window 2026-10-18 00:00:00 .. 2026-10-24 10:24:02, 164000 entries, 0 unparsable lines -->
+
+<h4 id="d1-rahmen">D1 Rahmen</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Größe</th>
+<th>Wert</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Einträge</td>
+<td>164000</td>
+</tr>
+<tr>
+<td>Zeitraum</td>
+<td>2026-10-18 00:00:00 .. 2026-10-24 10:24:02 (4 Tage)</td>
+</tr>
+<tr>
+<td>Clients (IPs)</td>
+<td>17</td>
+</tr>
+<tr>
+<td>verschiedene Namen</td>
+<td>2732</td>
+</tr>
+<tr>
+<td>geblockt (<code>IsFiltered</code>)</td>
+<td>72443 (44.2 %)</td>
+</tr>
+<tr>
+<td>aus Cache beantwortet</td>
+<td>32711 (19.9 %)</td>
+</tr>
+<tr>
+<td>Client-Protokoll</td>
+<td>plain 164000</td>
+</tr>
+<tr>
+<td>AdGuard <code>ratelimit</code></td>
+<td>20/s je /24</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Ergebnisklassen (<code>Result.Reason</code>):</strong></p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Bedeutung</th>
+<th>Einträge</th>
+<th>Anteil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>nicht gefiltert</td>
+<td>77698</td>
+<td>47.4 %</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Blockliste</td>
+<td>72443</td>
+<td>44.2 %</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Allowlist</td>
+<td>12768</td>
+<td>7.8 %</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Rewrite</td>
+<td>797</td>
+<td>0.5 %</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Rewrite (Regel)</td>
+<td>294</td>
+<td>0.2 %</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d2-anfragen-je-tag">D2 Anfragen je Tag</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Anfragen</th>
+<th>geblockt</th>
+<th>Anteil</th>
+<th>Clients</th>
+<th>Namen</th>
+<th>NXDOMAIN</th>
+<th>SERVFAIL/Fehler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wed 21.10.</td>
+<td>10320</td>
+<td>4919</td>
+<td>47.7 %</td>
+<td>12</td>
+<td>668</td>
+<td>594</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Thu 22.10.</td>
+<td>84074</td>
+<td>38608</td>
+<td>45.9 %</td>
+<td>16</td>
+<td>1938</td>
+<td>3367</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Fri 23.10.</td>
+<td>63603</td>
+<td>25821</td>
+<td>40.6 %</td>
+<td>10</td>
+<td>1694</td>
+<td>2480</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Sat 24.10.</td>
+<td>6003</td>
+<td>3095</td>
+<td>51.6 %</td>
+<td>8</td>
+<td>314</td>
+<td>18</td>
+<td>0</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d3-tagesprofil-anfragen-je-stunde-summe-über-die-tage">D3 Tagesprofil (Anfragen je Stunde, Summe über die Tage)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Zone</th>
+<th>00</th>
+<th>01</th>
+<th>02</th>
+<th>03</th>
+<th>04</th>
+<th>05</th>
+<th>06</th>
+<th>07</th>
+<th>08</th>
+<th>09</th>
+<th>10</th>
+<th>11</th>
+<th>12</th>
+<th>13</th>
+<th>14</th>
+<th>15</th>
+<th>16</th>
+<th>17</th>
+<th>18</th>
+<th>19</th>
+<th>20</th>
+<th>21</th>
+<th>22</th>
+<th>23</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gesamt</td>
+<td>3250</td>
+<td>3161</td>
+<td>2783</td>
+<td>2425</td>
+<td>2341</td>
+<td>2224</td>
+<td>2262</td>
+<td>2119</td>
+<td>6086</td>
+<td>15392</td>
+<td>13265</td>
+<td>13800</td>
+<td>13965</td>
+<td>13834</td>
+<td>12891</td>
+<td>10242</td>
+<td>11154</td>
+<td>6334</td>
+<td>4192</td>
+<td>3148</td>
+<td>2817</td>
+<td>7370</td>
+<td>5340</td>
+<td>3605</td>
+</tr>
+<tr>
+<td>Router (private)</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>14</td>
+<td>0</td>
+</tr>
+<tr>
+<td>private</td>
+<td>1573</td>
+<td>1424</td>
+<td>1097</td>
+<td>806</td>
+<td>828</td>
+<td>579</td>
+<td>659</td>
+<td>510</td>
+<td>1599</td>
+<td>1414</td>
+<td>1050</td>
+<td>904</td>
+<td>1312</td>
+<td>647</td>
+<td>1874</td>
+<td>753</td>
+<td>2221</td>
+<td>1464</td>
+<td>1544</td>
+<td>1270</td>
+<td>1087</td>
+<td>2321</td>
+<td>2376</td>
+<td>1840</td>
+</tr>
+<tr>
+<td>smarthome</td>
+<td>53</td>
+<td>57</td>
+<td>9</td>
+<td>8</td>
+<td>8</td>
+<td>16</td>
+<td>10</td>
+<td>14</td>
+<td>11</td>
+<td>9</td>
+<td>7</td>
+<td>9</td>
+<td>4</td>
+<td>6</td>
+<td>5</td>
+<td>4</td>
+<td>4</td>
+<td>232</td>
+<td>200</td>
+<td>69</td>
+<td>51</td>
+<td>94</td>
+<td>56</td>
+<td>71</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>962</td>
+<td>1027</td>
+<td>1014</td>
+<td>949</td>
+<td>837</td>
+<td>971</td>
+<td>896</td>
+<td>933</td>
+<td>936</td>
+<td>913</td>
+<td>721</td>
+<td>573</td>
+<td>634</td>
+<td>578</td>
+<td>560</td>
+<td>558</td>
+<td>511</td>
+<td>563</td>
+<td>564</td>
+<td>904</td>
+<td>730</td>
+<td>823</td>
+<td>993</td>
+<td>980</td>
+</tr>
+<tr>
+<td>tv</td>
+<td>662</td>
+<td>653</td>
+<td>663</td>
+<td>662</td>
+<td>668</td>
+<td>658</td>
+<td>697</td>
+<td>662</td>
+<td>655</td>
+<td>653</td>
+<td>658</td>
+<td>655</td>
+<td>649</td>
+<td>658</td>
+<td>657</td>
+<td>655</td>
+<td>674</td>
+<td>197</td>
+<td>0</td>
+<td>905</td>
+<td>949</td>
+<td>1291</td>
+<td>674</td>
+<td>656</td>
+</tr>
+<tr>
+<td>unbekannt</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>16</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>4</td>
+<td>0</td>
+<td>16</td>
+</tr>
+<tr>
+<td>work</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>2885</td>
+<td>12403</td>
+<td>10829</td>
+<td>11659</td>
+<td>11366</td>
+<td>11945</td>
+<td>9795</td>
+<td>8272</td>
+<td>7744</td>
+<td>3862</td>
+<td>1884</td>
+<td>0</td>
+<td>0</td>
+<td>2837</td>
+<td>1227</td>
+<td>42</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d4-je-client-volumen-block-anteil-breite">D4 Je Client: Volumen, Block-Anteil, Breite</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Zone</th>
+<th>Anfragen</th>
+<th>Anteil</th>
+<th>geblockt</th>
+<th>Block-Anteil</th>
+<th>Namen</th>
+<th>NXDOMAIN</th>
+<th>max/s</th>
+<th>max/min</th>
+<th>erste</th>
+<th>letzte</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>work</td>
+<td>96750</td>
+<td>59.0 %</td>
+<td>33353</td>
+<td>34.5 %</td>
+<td>1348</td>
+<td>6058</td>
+<td>43</td>
+<td>544</td>
+<td>21.10. 21:14</td>
+<td>23.10. 17:24</td>
+</tr>
+<tr>
+<td>192.168.60.245 (homeassistant)</td>
+<td>smarthome_srv</td>
+<td>19130</td>
+<td>11.7 %</td>
+<td>13000</td>
+<td>68.0 %</td>
+<td>291</td>
+<td>0</td>
+<td>21</td>
+<td>199</td>
+<td>21.10. 21:14</td>
+<td>24.10. 10:24</td>
+</tr>
+<tr>
+<td>192.168.50.158 (TV)</td>
+<td>tv</td>
+<td>15895</td>
+<td>9.7 %</td>
+<td>14477</td>
+<td>91.1 %</td>
+<td>104</td>
+<td>0</td>
+<td>8</td>
+<td>78</td>
+<td>21.10. 21:14</td>
+<td>22.10. 21:58</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>private</td>
+<td>13120</td>
+<td>8.0 %</td>
+<td>4815</td>
+<td>36.7 %</td>
+<td>365</td>
+<td>334</td>
+<td>20</td>
+<td>75</td>
+<td>21.10. 21:14</td>
+<td>24.10. 10:22</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td>12780</td>
+<td>7.8 %</td>
+<td>4637</td>
+<td>36.3 %</td>
+<td>767</td>
+<td>17</td>
+<td>20</td>
+<td>116</td>
+<td>21.10. 21:15</td>
+<td>23.10. 21:52</td>
+</tr>
+<tr>
+<td>192.168.20.238 (OP-T490)</td>
+<td>private</td>
+<td>5252</td>
+<td>3.2 %</td>
+<td>1422</td>
+<td>27.1 %</td>
+<td>236</td>
+<td>50</td>
+<td>20</td>
+<td>64</td>
+<td>21.10. 23:01</td>
+<td>24.10. 10:22</td>
+</tr>
+<tr>
+<td>192.168.10.31 (Govee-TV-Light)</td>
+<td>smarthome</td>
+<td>370</td>
+<td>0.2 %</td>
+<td>366</td>
+<td>98.9 %</td>
+<td>3</td>
+<td>0</td>
+<td>5</td>
+<td>5</td>
+<td>21.10. 21:15</td>
+<td>22.10. 21:57</td>
+</tr>
+<tr>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>smarthome</td>
+<td>368</td>
+<td>0.2 %</td>
+<td>133</td>
+<td>36.1 %</td>
+<td>54</td>
+<td>0</td>
+<td>14</td>
+<td>25</td>
+<td>22.10. 18:02</td>
+<td>24.10. 10:22</td>
+</tr>
+<tr>
+<td>192.168.10.189</td>
+<td>smarthome</td>
+<td>230</td>
+<td>0.1 %</td>
+<td>230</td>
+<td>100.0 %</td>
+<td>33</td>
+<td>0</td>
+<td>8</td>
+<td>27</td>
+<td>22.10. 17:39</td>
+<td>22.10. 18:01</td>
+</tr>
+<tr>
+<td>127.0.0.1</td>
+<td>unbekannt</td>
+<td>20</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>6</td>
+<td>0</td>
+<td>8</td>
+<td>8</td>
+<td>21.10. 21:23</td>
+<td>22.10. 17:38</td>
+</tr>
+<tr>
+<td>::1</td>
+<td>unbekannt</td>
+<td>16</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>4</td>
+<td>0</td>
+<td>8</td>
+<td>8</td>
+<td>21.10. 23:01</td>
+<td>22.10. 17:38</td>
+</tr>
+<tr>
+<td>192.168.50.238</td>
+<td>tv</td>
+<td>16</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>2</td>
+<td>0</td>
+<td>2</td>
+<td>8</td>
+<td>22.10. 16:45</td>
+<td>22.10. 16:48</td>
+</tr>
+<tr>
+<td>192.168.20.1 (Router (private))</td>
+<td>Router (private)</td>
+<td>14</td>
+<td>0.0 %</td>
+<td>10</td>
+<td>71.4 %</td>
+<td>5</td>
+<td>0</td>
+<td>10</td>
+<td>10</td>
+<td>21.10. 22:56</td>
+<td>21.10. 22:57</td>
+</tr>
+<tr>
+<td>192.168.10.10 (Nuki-Bridge)</td>
+<td>smarthome</td>
+<td>12</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>5</td>
+<td>0</td>
+<td>4</td>
+<td>4</td>
+<td>22.10. 07:05</td>
+<td>24.10. 07:05</td>
+</tr>
+<tr>
+<td>192.168.10.20 (Voice-Assistant-WoZi)</td>
+<td>smarthome</td>
+<td>9</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>21.10. 23:18</td>
+<td>24.10. 05:36</td>
+</tr>
+<tr>
+<td>192.168.10.22 (Voice-Assistant-Kids)</td>
+<td>smarthome</td>
+<td>9</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>21.10. 23:44</td>
+<td>24.10. 05:36</td>
+</tr>
+<tr>
+<td>192.168.10.23 (Voice-Assistant-Kitchen)</td>
+<td>smarthome</td>
+<td>9</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>22.10. 01:47</td>
+<td>24.10. 05:36</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d5-je-zone">D5 Je Zone</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Zone</th>
+<th>Clients</th>
+<th>Anfragen</th>
+<th>Anteil</th>
+<th>geblockt</th>
+<th>Block-Anteil</th>
+<th>Namen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Router (private)</td>
+<td>1</td>
+<td>14</td>
+<td>0.0 %</td>
+<td>10</td>
+<td>71.4 %</td>
+<td>5</td>
+</tr>
+<tr>
+<td>private</td>
+<td>3</td>
+<td>31152</td>
+<td>19.0 %</td>
+<td>10874</td>
+<td>34.9 %</td>
+<td>1159</td>
+</tr>
+<tr>
+<td>smarthome</td>
+<td>7</td>
+<td>1007</td>
+<td>0.6 %</td>
+<td>729</td>
+<td>72.4 %</td>
+<td>63</td>
+</tr>
+<tr>
+<td>smarthome_srv</td>
+<td>1</td>
+<td>19130</td>
+<td>11.7 %</td>
+<td>13000</td>
+<td>68.0 %</td>
+<td>291</td>
+</tr>
+<tr>
+<td>tv</td>
+<td>2</td>
+<td>15911</td>
+<td>9.7 %</td>
+<td>14477</td>
+<td>91.0 %</td>
+<td>106</td>
+</tr>
+<tr>
+<td>unbekannt</td>
+<td>2</td>
+<td>36</td>
+<td>0.0 %</td>
+<td>0</td>
+<td>0.0 %</td>
+<td>6</td>
+</tr>
+<tr>
+<td>work</td>
+<td>1</td>
+<td>96750</td>
+<td>59.0 %</td>
+<td>33353</td>
+<td>34.5 %</td>
+<td>1348</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d6-blocks-je-filterliste">D6 Blocks je Filterliste</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Liste</th>
+<th>Blocks</th>
+<th>Anteil</th>
+<th>Namen</th>
+<th>Clients</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>-</td>
+<td>39010</td>
+<td>53.8 %</td>
+<td>335</td>
+<td>8</td>
+</tr>
+<tr>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>23987</td>
+<td>33.1 %</td>
+<td>16</td>
+<td>4</td>
+</tr>
+<tr>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>8558</td>
+<td>11.8 %</td>
+<td>128</td>
+<td>5</td>
+</tr>
+<tr>
+<td>AdGuard DNS filter</td>
+<td>809</td>
+<td>1.1 %</td>
+<td>49</td>
+<td>4</td>
+</tr>
+<tr>
+<td>HaGeZi's Encrypted DNS Bypass</td>
+<td>63</td>
+<td>0.1 %</td>
+<td>7</td>
+<td>3</td>
+</tr>
+<tr>
+<td>HaGeZi's URL Shortener Blocklist</td>
+<td>14</td>
+<td>0.0 %</td>
+<td>3</td>
+<td>2</td>
+</tr>
+<tr>
+<td>HaGeZi's The World's Most Abused TLDs</td>
+<td>2</td>
+<td>0.0 %</td>
+<td>1</td>
+<td>1</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d7-meistgeblockte-namen">D7 Meistgeblockte Namen</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Blocks</th>
+<th>Clients</th>
+<th>Liste</th>
+<th>Regel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ipv6.msftconnecttest.com</code></td>
+<td>10439</td>
+<td>OP-Work-Laptop 10439</td>
+<td>-</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>eu-mobile.events.data.microsoft.com</code></td>
+<td>7104</td>
+<td>OP-Work-Laptop 6547, OP-S25 557</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>on-hweudc-o.api.leiniao.com</code></td>
+<td>6853</td>
+<td>TV 6853</td>
+<td>-</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>embeddedassistant.googleapis.com</code></td>
+<td>5482</td>
+<td>TV 5482</td>
+<td>-</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>self.events.data.microsoft.com</code></td>
+<td>5015</td>
+<td>OP-Work-Laptop 4995, OP-S25 20</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>eu-teams.events.data.microsoft.com</code></td>
+<td>3299</td>
+<td>OP-Work-Laptop 3131, OP-S25 163, OP-T41S 5</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>teams.events.data.microsoft.com</code></td>
+<td>2997</td>
+<td>OP-Work-Laptop 2350, OP-S25 647</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>http-intake.logs.us5.datadoghq.com</code></td>
+<td>2698</td>
+<td>OP-T41S 2327, OP-T490 371</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>mobile.events.data.microsoft.com</code></td>
+<td>2350</td>
+<td>OP-T41S 1850, OP-Work-Laptop 340, OP-T490 126</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>eu-office.events.data.microsoft.com</code></td>
+<td>1466</td>
+<td>OP-Work-Laptop 1463, OP-T41S 2, OP-S25 1</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>mediaservices.cdn-apple.com</code></td>
+<td>1367</td>
+<td>TV 1367</td>
+<td>-</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>mobile.pipe.aria.microsoft.com</code></td>
+<td>780</td>
+<td>OP-S25 780</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>nexus-websocket-a.intercom.io</code></td>
+<td>722</td>
+<td>OP-Work-Laptop 509, OP-T41S 156, OP-T490 57</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>m365cdn.nel.measure.office.net</code></td>
+<td>590</td>
+<td>OP-Work-Laptop 590</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>mefo1.zdf.de</code></td>
+<td>588</td>
+<td>TV 588</td>
+<td>-</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>a-api.anthropic.com</code></td>
+<td>505</td>
+<td>OP-S25 505</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>usage-ping.brave.com</code></td>
+<td>498</td>
+<td>OP-T490 454, OP-S25 44</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>euc-excel-telemetry.officeapps.live.com</code></td>
+<td>390</td>
+<td>OP-Work-Laptop 390</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>aqm3wd1qlc3dy-ats.iot.us-east-1.amazonaws.com</code></td>
+<td>346</td>
+<td>Govee-TV-Light 346</td>
+<td>-</td>
+<td><code>/.*/$client=192.168.10.0/24</code></td>
+</tr>
+<tr>
+<td><code>exo.nel.measure.office.net</code></td>
+<td>323</td>
+<td>OP-Work-Laptop 323</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>spo.nel.measure.office.net</code></td>
+<td>296</td>
+<td>OP-Work-Laptop 296</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>in.appcenter.ms</code></td>
+<td>290</td>
+<td>OP-S25 290</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>browser.events.data.microsoft.com</code></td>
+<td>281</td>
+<td>OP-Work-Laptop 279, OP-T41S 2</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>enterprise-eudb.activity.windows.com</code></td>
+<td>232</td>
+<td>OP-Work-Laptop 232</td>
+<td>HaGeZi's Windows/Office Tracker Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>go-updater.brave.com</code></td>
+<td>214</td>
+<td>OP-T490 174, OP-S25 40</td>
+<td>-</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>incoming.telemetry.mozilla.org</code></td>
+<td>212</td>
+<td>OP-T41S 178, OP-Work-Laptop 34</td>
+<td>AdGuard DNS filter</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>metrics-prod.suno.com</code></td>
+<td>193</td>
+<td>OP-S25 193</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>merino.services.mozilla.com</code></td>
+<td>151</td>
+<td>OP-T41S 137, OP-Work-Laptop 14</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>o1158394.ingest.us.sentry.io</code></td>
+<td>145</td>
+<td>OP-Work-Laptop 142, OP-S25 3</td>
+<td>HaGeZi's Ultimate Blocklist</td>
+<td>`</td>
+</tr>
+<tr>
+<td><code>10.60.168.192.in-addr.arpa</code></td>
+<td>133</td>
+<td>homeassistant 133</td>
+<td>-</td>
+<td><code>/.*/$client=192.168.60.0/24</code></td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d8-je-client-die-meistgeblockten-namen-top-5">D8 Je Client die meistgeblockten Namen (Top 5)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Blocks</th>
+<th>Namen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>33353</td>
+<td><code>ipv6.msftconnecttest.com</code> ×10439<br><code>eu-mobile.events.data.microsoft.com</code> ×6547<br><code>self.events.data.microsoft.com</code> ×4995<br><code>eu-teams.events.data.microsoft.com</code> ×3131<br><code>teams.events.data.microsoft.com</code> ×2350</td>
+</tr>
+<tr>
+<td>192.168.60.245 (homeassistant)</td>
+<td>13000</td>
+<td><code>10.60.168.192.in-addr.arpa</code> ×133<br><code>12.60.168.192.in-addr.arpa</code> ×131<br><code>8.60.168.192.in-addr.arpa</code> ×129<br><code>11.60.168.192.in-addr.arpa</code> ×128<br><code>6.60.168.192.in-addr.arpa</code> ×127</td>
+</tr>
+<tr>
+<td>192.168.50.158 (TV)</td>
+<td>14477</td>
+<td><code>on-hweudc-o.api.leiniao.com</code> ×6853<br><code>embeddedassistant.googleapis.com</code> ×5482<br><code>mediaservices.cdn-apple.com</code> ×1367<br><code>mefo1.zdf.de</code> ×588<br><code>firebaseinstallations.googleapis.com</code> ×62</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>4815</td>
+<td><code>http-intake.logs.us5.datadoghq.com</code> ×2327<br><code>mobile.events.data.microsoft.com</code> ×1850<br><code>incoming.telemetry.mozilla.org</code> ×178<br><code>nexus-websocket-a.intercom.io</code> ×156<br><code>merino.services.mozilla.com</code> ×137</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>4637</td>
+<td><code>mobile.pipe.aria.microsoft.com</code> ×780<br><code>teams.events.data.microsoft.com</code> ×647<br><code>eu-mobile.events.data.microsoft.com</code> ×557<br><code>a-api.anthropic.com</code> ×505<br><code>in.appcenter.ms</code> ×290</td>
+</tr>
+<tr>
+<td>192.168.20.238 (OP-T490)</td>
+<td>1422</td>
+<td><code>usage-ping.brave.com</code> ×454<br><code>http-intake.logs.us5.datadoghq.com</code> ×371<br><code>go-updater.brave.com</code> ×174<br><code>mobile.events.data.microsoft.com</code> ×126<br><code>default.exp-tas.com</code> ×96</td>
+</tr>
+<tr>
+<td>192.168.10.31 (Govee-TV-Light)</td>
+<td>366</td>
+<td><code>aqm3wd1qlc3dy-ats.iot.us-east-1.amazonaws.com</code> ×346<br><code>app.govee.com</code> ×20</td>
+</tr>
+<tr>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>133</td>
+<td><code>ntp1.aliyun.com</code> ×7<br><code>time.google.com</code> ×7<br><code>ntp.tencent.com</code> ×6<br><code>time.apple.com</code> ×6<br><code>0.pool.ntp.org</code> ×6</td>
+</tr>
+<tr>
+<td>192.168.10.189</td>
+<td>230</td>
+<td><code>ntp1.aliyun.com</code> ×13<br><code>time.google.com</code> ×13<br><code>ntp.tencent.com</code> ×13<br><code>time.apple.com</code> ×13<br><code>0.pool.ntp.org</code> ×13</td>
+</tr>
+<tr>
+<td>192.168.20.1 (Router (private))</td>
+<td>10</td>
+<td><code>us.aws.cdn.hf.co</code> ×4<br><code>hf.co</code> ×4<br><code>cas-bridge.xethub.hf.co</code> ×2</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d9-default-deny-zonen-smarthome-smarthome_srv-erlaubte-namen-je-gerät-vollständig">D9 Default-Deny-Zonen (<code>smarthome</code>, <code>smarthome_srv</code>): erlaubte Namen je Gerät (vollständig)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Gerät</th>
+<th>Anfragen</th>
+<th>erlaubt</th>
+<th>geblockt</th>
+<th>erlaubte Namen</th>
+<th>erlaubt (Name × Anfragen)</th>
+<th>geblockt (Top 8)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.60.245 (homeassistant)</td>
+<td>19130</td>
+<td>6130</td>
+<td>13000</td>
+<td>32</td>
+<td><code>api.tailscale.com</code> ×4450<br><code>checkonline.home-assistant.io</code> ×870<br><code>github.com</code> ×241<br>`` ×136<br><code>aa015h6buqvih86i1.api.met.no</code> ×121<br><code>api.powercalc.nl</code> ×60<br><code>alerts.home-assistant.io</code> ×43<br><code>raw.githubusercontent.com</code> ×27<br><code>data-v2.hacs.xyz</code> ×22<br><code>pipe.deezer.com</code> ×21<br><code>pypi.org</code> ×20<br><code>auth.deezer.com</code> ×18<br><code>openrouter.ai</code> ×17<br><code>www.deezer.com</code> ×9<br><code>cdn-images.dzcdn.net</code> ×8<br><code>api.github.com</code> ×6<br><code>release-assets.githubusercontent.com</code> ×6<br><code>zigbee-ota.sonoff.tech</code> ×6<br><code>brands.home-assistant.io</code> ×6<br><code>ghcr.io</code> ×6<br><code>pkg-containers.githubusercontent.com</code> ×4<br><code>on.dcl.csa-iot.org</code> ×4<br><code>on.test-net.dcl.csa-iot.org</code> ×4<br><code>version.home-assistant.io</code> ×4<br><code>_checkdns.home-assistant.io</code> ×4<br><code>media.deezer.com</code> ×4<br><code>cdnt-stream.dzcdn.net</code> ×4<br><code>controlplane.tailscale.com</code> ×2<br><code>de1.api.radio-browser.info</code> ×2<br><code>wheels.home-assistant.io</code> ×2<br><code>f-cdnt-stream.dzcdn.net</code> ×2<br><code>_api._tcp.radio-browser.info</code> ×1</td>
+<td><code>10.60.168.192.in-addr.arpa</code> ×133<br><code>12.60.168.192.in-addr.arpa</code> ×131<br><code>8.60.168.192.in-addr.arpa</code> ×129<br><code>11.60.168.192.in-addr.arpa</code> ×128<br><code>6.60.168.192.in-addr.arpa</code> ×127<br><code>7.60.168.192.in-addr.arpa</code> ×126<br><code>9.60.168.192.in-addr.arpa</code> ×126<br><code>13.60.168.192.in-addr.arpa</code> ×126 …</td>
+</tr>
+<tr>
+<td>192.168.10.31 (Govee-TV-Light)</td>
+<td>370</td>
+<td>4</td>
+<td>366</td>
+<td>1</td>
+<td><code>time.google.com</code> ×4</td>
+<td><code>aqm3wd1qlc3dy-ats.iot.us-east-1.amazonaws.com</code> ×346<br><code>app.govee.com</code> ×20</td>
+</tr>
+<tr>
+<td>192.168.10.11 (Sonoff-Panel)</td>
+<td>368</td>
+<td>235</td>
+<td>133</td>
+<td>36</td>
+<td><code>hub.home.arpa</code> ×181<br><code>f-droid.org</code> ×6<br><code>ntp1.aliyun.com</code> ×3<br><code>suggestqueries.google.com</code> ×3<br><code>mirror.ossplanet.net</code> ×2<br><code>ftp.fau.de</code> ×2<br><code>mirrors.chroot.ro</code> ×2<br><code>fdroid.tetaneutral.net</code> ×2<br><code>mirrors.dotsrc.org</code> ×2<br><code>mirror.init7.net</code> ×2<br><code>mirror.cyberbits.eu</code> ×2<br><code>mirror.level66.services</code> ×2<br><code>mirror.eu.ossplanet.net</code> ×2<br><code>ftp.gwdg.de</code> ×2<br><code>ntp.tencent.com</code> ×1<br><code>eu-apia.coolkit.cc</code> ×1<br><code>mirror.fcix.net</code> ×1<br><code>mirror.level66.network</code> ×1<br><code>mirrors.hostico.ro</code> ×1<br><code>ftp.lug.ro</code> ×1<br><code>mirror.freedif.org</code> ×1<br><code>ftp.agdsn.de</code> ×1<br><code>plug-mirror.rcac.purdue.edu</code> ×1<br><code>opencolo.mm.fcix.net</code> ×1<br><code>my.home-assistant.io</code> ×1<br><code>www.home-assistant.io</code> ×1<br><code>update.googleapis.com</code> ×1<br><code>edgedl.me.gvt1.com</code> ×1<br><code>www.google.com</code> ×1<br><code>twitter.com</code> ×1<br><code>www.facebook.com</code> ×1<br><code>www.yahoo.com</code> ×1<br><code>t1.gstatic.com</code> ×1<br><code>t0.gstatic.com</code> ×1<br><code>raw.githubusercontent.com</code> ×1<br><code>version.pm2.io</code> ×1</td>
+<td><code>ntp1.aliyun.com</code> ×7<br><code>time.google.com</code> ×7<br><code>ntp.tencent.com</code> ×6<br><code>time.apple.com</code> ×6<br><code>0.pool.ntp.org</code> ×6<br><code>time.cloudflare.com</code> ×6<br><code>time.windows.com</code> ×6<br><code>cn.pool.ntp.org</code> ×6 …</td>
+</tr>
+<tr>
+<td>192.168.10.189</td>
+<td>230</td>
+<td>0</td>
+<td>230</td>
+<td>0</td>
+<td></td>
+<td><code>ntp1.aliyun.com</code> ×13<br><code>time.google.com</code> ×13<br><code>ntp.tencent.com</code> ×13<br><code>time.apple.com</code> ×13<br><code>0.pool.ntp.org</code> ×13<br><code>time.cloudflare.com</code> ×13<br><code>time.windows.com</code> ×13<br><code>cn.pool.ntp.org</code> ×13 …</td>
+</tr>
+<tr>
+<td>192.168.10.10 (Nuki-Bridge)</td>
+<td>12</td>
+<td>12</td>
+<td>0</td>
+<td>5</td>
+<td><code>sse7-bridge.nuki.io</code> ×4<br><code>sse3-bridge.nuki.io</code> ×4<br><code>sse9-bridge.nuki.io</code> ×2<br><code>sse8-bridge.nuki.io</code> ×1<br><code>sse4-bridge.nuki.io</code> ×1</td>
+<td></td>
+</tr>
+<tr>
+<td>192.168.10.20 (Voice-Assistant-WoZi)</td>
+<td>9</td>
+<td>9</td>
+<td>0</td>
+<td>1</td>
+<td><code>firmware.esphome.io</code> ×9</td>
+<td></td>
+</tr>
+<tr>
+<td>192.168.10.22 (Voice-Assistant-Kids)</td>
+<td>9</td>
+<td>9</td>
+<td>0</td>
+<td>1</td>
+<td><code>firmware.esphome.io</code> ×9</td>
+<td></td>
+</tr>
+<tr>
+<td>192.168.10.23 (Voice-Assistant-Kitchen)</td>
+<td>9</td>
+<td>9</td>
+<td>0</td>
+<td>1</td>
+<td><code>firmware.esphome.io</code> ×9</td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d10-verschlüsseltes-dns-umgehen-anfragen-nach-dohdot-endpunkten-und-canaries">D10 Verschlüsseltes DNS umgehen: Anfragen nach DoH/DoT-Endpunkten und Canaries</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Zone</th>
+<th>Name</th>
+<th>Ergebnis</th>
+<th>Anfragen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td><code>cloudflare-dns.com</code></td>
+<td>geblockt</td>
+<td>22</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>private</td>
+<td><code>cloudflare-dns.com</code></td>
+<td>geblockt</td>
+<td>14</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td><code>dns.google.com</code></td>
+<td>geblockt</td>
+<td>8</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td><code>mozilla.cloudflare-dns.com</code></td>
+<td>geblockt</td>
+<td>8</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td><code>dns.quad9.net</code></td>
+<td>geblockt</td>
+<td>5</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td><code>dns.google</code></td>
+<td>geblockt</td>
+<td>3</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>work</td>
+<td><code>cloudflare-dns.com</code></td>
+<td>geblockt</td>
+<td>1</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td><code>dns11.quad9.net</code></td>
+<td>geblockt</td>
+<td>1</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>private</td>
+<td><code>dnsforge.de</code></td>
+<td>geblockt</td>
+<td>1</td>
+</tr>
+</tbody>
+</table></div>
+<p>gesamt 63 Anfragen von 3 Clients; erlaubt: 0</p>
+<h4 id="d11-anfragetypen">D11 Anfragetypen</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Typ</th>
+<th>Anfragen</th>
+<th>Anteil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>118479</td>
+<td>72.2 %</td>
+</tr>
+<tr>
+<td>AAAA</td>
+<td>19660</td>
+<td>12.0 %</td>
+</tr>
+<tr>
+<td>PTR</td>
+<td>14062</td>
+<td>8.6 %</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>10104</td>
+<td>6.2 %</td>
+</tr>
+<tr>
+<td>SRV</td>
+<td>1431</td>
+<td>0.9 %</td>
+</tr>
+<tr>
+<td>NS</td>
+<td>139</td>
+<td>0.1 %</td>
+</tr>
+<tr>
+<td>SOA</td>
+<td>78</td>
+<td>0.0 %</td>
+</tr>
+<tr>
+<td>TXT</td>
+<td>38</td>
+<td>0.0 %</td>
+</tr>
+<tr>
+<td>TYPE11</td>
+<td>3</td>
+<td>0.0 %</td>
+</tr>
+<tr>
+<td>CNAME</td>
+<td>3</td>
+<td>0.0 %</td>
+</tr>
+<tr>
+<td>HINFO</td>
+<td>3</td>
+<td>0.0 %</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Ungewöhnliche Typen je Client</strong> (ANY, AXFR, CNAME, HINFO, IXFR, MX, NS, NULL, SOA, SRV, TXT):</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Typ</th>
+<th>Domain</th>
+<th>Anfragen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>SRV</td>
+<td><code>kunde-a.tld</code></td>
+<td>976</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>SRV</td>
+<td><code>kunde-b.tld</code></td>
+<td>147</td>
+</tr>
+<tr>
+<td>192.168.60.245 (homeassistant)</td>
+<td>NS</td>
+<td>``</td>
+<td>136</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>SRV</td>
+<td><code>firma-konzern.tld</code></td>
+<td>119</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>SOA</td>
+<td><code>firma-konzern.tld</code></td>
+<td>75</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>SRV</td>
+<td><code>firma-intern.tld</code></td>
+<td>46</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td>SRV</td>
+<td><code>kunde-c.tld</code></td>
+<td>43</td>
+</tr>
+<tr>
+<td>192.168.20.238 (OP-T490)</td>
+<td>TXT</td>
+<td><code>cymru.com</code></td>
+<td>38</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>SRV</td>
+<td><code>ubuntu.com</code></td>
+<td>28</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td>SRV</td>
+<td><code>kunde-b.tld</code></td>
+<td>15</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>SRV</td>
+<td><code>1password.com</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>SRV</td>
+<td><code>docker.com</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>SRV</td>
+<td><code>signal.org</code></td>
+<td>8</td>
+</tr>
+<tr>
+<td>192.168.20.238 (OP-T490)</td>
+<td>SRV</td>
+<td><code>ubuntu.com</code></td>
+<td>8</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td>SRV</td>
+<td><code>mozilla.org</code></td>
+<td>7</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d12-nxdomain-und-servfail">D12 NXDOMAIN und SERVFAIL</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Name</th>
+<th>NXDOMAIN</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>wpad.firma-intern.tld</code></td>
+<td>3893</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_autodiscover._tcp.kunde-a.tld</code></td>
+<td>739</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>ccm1.intern.kunde-b.tld</code></td>
+<td>242</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td><code>localhost.lan</code></td>
+<td>238</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>vedproxypac.firma-konzern.tld</code></td>
+<td>139</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>crl.anydesk.com</code></td>
+<td>121</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_8443._https.ccm1.intern.kunde-b.tld</code></td>
+<td>90</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>l-378929-1.dom1.firma-konzern.tld</code></td>
+<td>31</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_ldap._tcp.fr002._sites.dc._msdcs.lan.firma-intern.tld</code></td>
+<td>24</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_ldap._tcp.fr002._sites.dc._msdcs.lan.dom1.firma-konzern.tld</code></td>
+<td>22</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_ldap._tcp.fr002._sites.dc._msdcs.lan.firma-konzern.tld</code></td>
+<td>22</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_ldap._tcp.fr002._sites.dc._msdcs.lan.kunde-c.tld</code></td>
+<td>22</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_ldap._tcp.dc._msdcs.lan.firma-intern.tld</code></td>
+<td>22</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>_ldap._tcp.dc._msdcs.lan.dom1.firma-konzern.tld</code></td>
+<td>22</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>wpad.dom1.firma-konzern.tld</code></td>
+<td>21</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>SERVFAIL / Upstream-Fehler</strong> (0 gesamt):</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Name</th>
+<th>Upstream</th>
+<th>Anfragen</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table></div>
+<h4 id="d13-tunnel-heuristik-viele-verschiedene-subdomains-je-domain-lange-namen">D13 Tunnel-Heuristik: viele verschiedene Subdomains je Domain, lange Namen</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Domain</th>
+<th>verschiedene Namen</th>
+<th>längster Name</th>
+<th>Ergebnis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>in-addr.arpa</code></td>
+<td>613</td>
+<td>28</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.60.245 (homeassistant)</td>
+<td><code>in-addr.arpa</code></td>
+<td>254</td>
+<td>27</td>
+<td>geblockt</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td><code>gvt1.com</code></td>
+<td>147</td>
+<td>27</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>microsoft.com</code></td>
+<td>136</td>
+<td>72</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td><code>googleapis.com</code></td>
+<td>76</td>
+<td>49</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>office.net</code></td>
+<td>50</td>
+<td>34</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>office.com</code></td>
+<td>47</td>
+<td>54</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td><code>microsoft.com</code></td>
+<td>46</td>
+<td>52</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.20.238 (OP-T490)</td>
+<td><code>cymru.com</code></td>
+<td>38</td>
+<td>36</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.20.111 (OP-T41S)</td>
+<td><code>hcaptcha.com</code></td>
+<td>33</td>
+<td>27</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>cloud.microsoft</code></td>
+<td>31</td>
+<td>60</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.20.189 (OP-S25)</td>
+<td><code>wbx2.com</code></td>
+<td>27</td>
+<td>40</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>live.com</code></td>
+<td>26</td>
+<td>39</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.70.188 (OP-Work-Laptop)</td>
+<td><code>webex.com</code></td>
+<td>25</td>
+<td>55</td>
+<td>erlaubt</td>
+</tr>
+<tr>
+<td>192.168.20.238 (OP-T490)</td>
+<td><code>in-addr.arpa</code></td>
+<td>25</td>
+<td>28</td>
+<td>erlaubt</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Längste Namen:</strong> <code><DEVICE-ID>.us-east-1.prod.service.minerva.devices.a2z.com</code> (110, TV); <code>_ldap._tcp.<UUID>.domains._msdcs.dom1.firma-konzern.tld</code> (86, OP-Work-Laptop); <code>aks-prod-switzerlandnorth.access-point.cloudmessaging.edge.microsoft.com</code> (72, OP-Work-Laptop); <code>displaycatalog-caching.bigcatalog-frontdoor-prod.commerce.microsoft.com</code> (71, OP-Work-Laptop); <code>www.goooooooooooooooooooooooooooooooooooooooooooooooooooooooooogle.com</code> (70, OP-S25); <code>aks-prod-westeurope.access-point.cloudmessaging.edge.microsoft.com</code> (66, OP-Work-Laptop); <code><UUID>.frame.claudeusercontent.com</code> (64, OP-Work-Laptop); <code><UUID>.frame.claudeusercontent.com</code> (64, OP-Work-Laptop)</p>
+<h4 id="d14-clients-ohne-reservierung-oder-außerhalb-der-zonen-netze-router-eigene-anfragen">D14 Clients ohne Reservierung oder außerhalb der Zonen-Netze, Router-eigene Anfragen</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Zone</th>
+<th>Anfragen</th>
+<th>häufigste Namen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.10.189</td>
+<td>smarthome</td>
+<td>230</td>
+<td><code>ntp1.aliyun.com</code>, <code>time.google.com</code>, <code>ntp.tencent.com</code>, <code>time.apple.com</code></td>
+</tr>
+<tr>
+<td>127.0.0.1</td>
+<td>unbekannt</td>
+<td>20</td>
+<td><code>3.openwrt.pool.ntp.org</code>, <code>2.openwrt.pool.ntp.org</code>, <code>openwrt.home.arpa</code>, <code>example.com</code></td>
+</tr>
+<tr>
+<td>::1</td>
+<td>unbekannt</td>
+<td>16</td>
+<td><code>3.openwrt.pool.ntp.org</code>, <code>2.openwrt.pool.ntp.org</code>, <code>1.openwrt.pool.ntp.org</code>, <code>0.openwrt.pool.ntp.org</code></td>
+</tr>
+<tr>
+<td>192.168.50.238</td>
+<td>tv</td>
+<td>16</td>
+<td><code>boot.net.anydesk.com</code>, <code>relay-10cd7580.net.anydesk.com</code></td>
+</tr>
+<tr>
+<td>192.168.20.1 (Router (private))</td>
+<td>Router (private)</td>
+<td>14</td>
+<td><code>us.aws.cdn.hf.co</code>, <code>hf.co</code>, <code>huggingface.co</code>, <code>cdn-lfs.huggingface.co</code></td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d15-rate-limit-sättigung-sekunden-mit--ratelimit-anfragen-je-24-dunkelziffer-verworfene-anfragen-stehen-nicht-im-log">D15 Rate-Limit-Sättigung: Sekunden mit ≥ <code>ratelimit</code> Anfragen je /24 (Dunkelziffer: verworfene Anfragen stehen nicht im Log)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>/24</th>
+<th>Zone</th>
+<th>max Anfragen/s</th>
+<th>Sekunden ≥ Limit</th>
+<th>schlimmste Sekunde</th>
+<th>betroffene Minuten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>192.168.60.0/24</td>
+<td>smarthome_srv</td>
+<td>21</td>
+<td>544</td>
+<td>21.10. 22:03:51</td>
+<td>124</td>
+</tr>
+<tr>
+<td>192.168.70.0/24</td>
+<td>work</td>
+<td>43</td>
+<td>88</td>
+<td>22.10. 10:59:46</td>
+<td>47</td>
+</tr>
+<tr>
+<td>192.168.20.0/24</td>
+<td>private</td>
+<td>20</td>
+<td>9</td>
+<td>21.10. 22:31:16</td>
+<td>7</td>
+</tr>
+<tr>
+<td>192.168.50.0/24</td>
+<td>tv</td>
+<td>8</td>
+<td>0</td>
+<td>-</td>
+<td>0</td>
+</tr>
+<tr>
+<td>192.168.10.0/24</td>
+<td>smarthome</td>
+<td>14</td>
+<td>0</td>
+<td>-</td>
+<td>0</td>
+</tr>
+<tr>
+<td>127.0.0.0/24</td>
+<td>unbekannt</td>
+<td>8</td>
+<td>0</td>
+<td>-</td>
+<td>0</td>
+</tr>
+<tr>
+<td>::1.0/24</td>
+<td>unbekannt</td>
+<td>8</td>
+<td>0</td>
+<td>-</td>
+<td>0</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d16-upstream-und-cache">D16 Upstream und Cache</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Größe</th>
+<th>Wert</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Upstream-Antworten (nicht Cache, nicht geblockt)</td>
+<td>58855</td>
+</tr>
+<tr>
+<td>Upstreams</td>
+<td>tls://<NEXTDNS-ID>.dns.nextdns.io:853 57688, - 1091, tls://9.9.9.9:853 49, tls://149.112.112.112:853 27</td>
+</tr>
+<tr>
+<td>Latenz p50 / p90 / p99 (ms)</td>
+<td>47 / 145 / 3048</td>
+</tr>
+<tr>
+<td>Antworten &gt; 1 s</td>
+<td>1029</td>
+</tr>
+<tr>
+<td>Cache-Trefferquote (nicht geblockt)</td>
+<td>35.7 %</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d17-meistangefragte-erlaubte-namen">D17 Meistangefragte erlaubte Namen</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Anfragen</th>
+<th>Clients</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>outlook.office365.com</code></td>
+<td>8984</td>
+<td>OP-Work-Laptop 8406, OP-S25 577, OP-T41S 1</td>
+</tr>
+<tr>
+<td><code>dns.msftncsi.com</code></td>
+<td>6583</td>
+<td>OP-Work-Laptop 6583</td>
+</tr>
+<tr>
+<td><code>www.msftconnecttest.com</code></td>
+<td>6558</td>
+<td>OP-Work-Laptop 6558</td>
+</tr>
+<tr>
+<td><code>api.tailscale.com</code></td>
+<td>4450</td>
+<td>homeassistant 4450</td>
+</tr>
+<tr>
+<td><code>wpad.firma-intern.tld</code></td>
+<td>3948</td>
+<td>OP-Work-Laptop 3948</td>
+</tr>
+<tr>
+<td><code>www.google.com</code></td>
+<td>2556</td>
+<td>OP-S25 1288, TV 684, OP-T490 523</td>
+</tr>
+<tr>
+<td><code>api.anthropic.com</code></td>
+<td>2284</td>
+<td>OP-T41S 1231, OP-T490 959, OP-Work-Laptop 94</td>
+</tr>
+<tr>
+<td><code>kunde-a.service-now.com</code></td>
+<td>2275</td>
+<td>OP-Work-Laptop 2275</td>
+</tr>
+<tr>
+<td><code>dec-visio.officeapps.live.com</code></td>
+<td>2203</td>
+<td>OP-Work-Laptop 2203</td>
+</tr>
+<tr>
+<td><code>coreservice.heimdalsecurity.com</code></td>
+<td>2078</td>
+<td>OP-Work-Laptop 2078</td>
+</tr>
+<tr>
+<td><code>messagingprodstorage.queue.core.windows.net</code></td>
+<td>1970</td>
+<td>OP-Work-Laptop 1970</td>
+</tr>
+<tr>
+<td><code>autodiscover.kunde-a.tld</code></td>
+<td>1344</td>
+<td>OP-Work-Laptop 1344</td>
+</tr>
+<tr>
+<td><code>login.microsoftonline.com</code></td>
+<td>1311</td>
+<td>OP-Work-Laptop 1168, OP-S25 134, OP-T41S 7</td>
+</tr>
+<tr>
+<td><code>teams.microsoft.com</code></td>
+<td>1283</td>
+<td>OP-Work-Laptop 1088, OP-S25 193, OP-T41S 2</td>
+</tr>
+<tr>
+<td><code>discovery-announce-v6.syncthing.net</code></td>
+<td>1274</td>
+<td>OP-T41S 1274</td>
+</tr>
+<tr>
+<td><code>gateway.zscaler.net</code></td>
+<td>1247</td>
+<td>OP-Work-Laptop 1247</td>
+</tr>
+<tr>
+<td><code>_autodiscover._tcp.kunde-a.tld</code></td>
+<td>976</td>
+<td>OP-Work-Laptop 976</td>
+</tr>
+<tr>
+<td><code>claude.ai</code></td>
+<td>937</td>
+<td>OP-Work-Laptop 745, OP-T490 82, OP-T41S 62</td>
+</tr>
+<tr>
+<td><code>edge.microsoft.com</code></td>
+<td>927</td>
+<td>OP-Work-Laptop 894, OP-S25 33</td>
+</tr>
+<tr>
+<td><code>checkonline.home-assistant.io</code></td>
+<td>870</td>
+<td>homeassistant 870</td>
+</tr>
+<tr>
+<td><code>www.bing.com</code></td>
+<td>708</td>
+<td>OP-Work-Laptop 693, OP-S25 15</td>
+</tr>
+<tr>
+<td><code>config.teams.microsoft.com</code></td>
+<td>705</td>
+<td>OP-Work-Laptop 669, OP-S25 33, OP-T41S 3</td>
+</tr>
+<tr>
+<td><code>outlook.office.com</code></td>
+<td>651</td>
+<td>OP-Work-Laptop 560, OP-S25 90, OP-T41S 1</td>
+</tr>
+<tr>
+<td><code>stun.syncthing.net</code></td>
+<td>641</td>
+<td>OP-T41S 641</td>
+</tr>
+<tr>
+<td><code>ch-veprod.traps.paloaltonetworks.com</code></td>
+<td>640</td>
+<td>OP-Work-Laptop 640</td>
+</tr>
+<tr>
+<td><code>dc-veprod.traps.paloaltonetworks.com</code></td>
+<td>631</td>
+<td>OP-Work-Laptop 631</td>
+</tr>
+<tr>
+<td><code>github.com</code></td>
+<td>629</td>
+<td>OP-T41S 319, homeassistant 241, OP-T490 62</td>
+</tr>
+<tr>
+<td><code>hub.home.arpa</code></td>
+<td>617</td>
+<td>OP-S25 396, Sonoff-Panel 181, OP-T490 40</td>
+</tr>
+<tr>
+<td><code>euc-common.online.office.com</code></td>
+<td>601</td>
+<td>OP-Work-Laptop 601</td>
+</tr>
+<tr>
+<td><code>oauth.officeapps.live.com</code></td>
+<td>561</td>
+<td>OP-Work-Laptop 561</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="d18-nur-am-letzten-tag-gesehene-namen--3-anfragen-je-client">D18 Nur am letzten Tag gesehene Namen (≥ 3 Anfragen, je Client)</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Client</th>
+<th>Name</th>
+<th>Anfragen</th>
+<th>Ergebnis</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table></div>
+<h4 id="d19-adguard-clients-persistent-und-ihre-schalter">D19 AdGuard-Clients (persistent) und ihre Schalter</h4>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Name</th>
+<th>IDs</th>
+<th>globale Einstellungen</th>
+<th>filtering_enabled</th>
+<th>ignore_querylog</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GX-Laptop</td>
+<td>192.168.70.218</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Govee-Desk-Lamp</td>
+<td>192.168.10.30</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Govee-TV-Light</td>
+<td>192.168.10.31</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>K1-DROID</td>
+<td>192.168.40.218</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Nuki-Bridge</td>
+<td>192.168.10.10</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Nuki-Ultra</td>
+<td>192.168.10.40</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>OP-Work-Laptop</td>
+<td>192.168.70.188</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>OP-S25</td>
+<td>192.168.20.189, 192.168.30.189, 192.168.40.189, 192.168.50.189</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>OP-T41S</td>
+<td>192.168.20.111</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>OP-T490</td>
+<td>192.168.10.238, 192.168.20.238, 192.168.30.238, 192.168.40.238, 192.168.50.238</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Sonoff-Panel</td>
+<td>192.168.10.11</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>TV</td>
+<td>192.168.50.158</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Voice-Assistant-Bad</td>
+<td>192.168.10.21</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Voice-Assistant-Kids</td>
+<td>192.168.10.22</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Voice-Assistant-Kitchen</td>
+<td>192.168.10.23</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>Voice-Assistant-WoZi</td>
+<td>192.168.10.20</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+<tr>
+<td>ecoflow</td>
+<td>192.168.10.116</td>
+<td>True</td>
+<td>False</td>
+<td>False</td>
+</tr>
+<tr>
+<td>homeassistant</td>
+<td>192.168.60.245</td>
+<td>True</td>
+<td>True</td>
+<td>False</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>filtering_enabled</code> wirkt nur, wenn <code>globale Einstellungen</code> False ist.</p>
+</div>
+</body>
+</html>

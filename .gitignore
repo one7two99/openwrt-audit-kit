@@ -1,0 +1,16 @@
+# generierte Spiegel und Audit-Tabellen: echte IPs/MACs, nie committen
+fwview-*.html
+fwview-*.json
+fwview.html
+fwview.json
+agview-*.html
+agview-*.json
+agview.html
+agview.json
+fwlog-audit-*.md
+dnslog-audit-*.md
+factinv-*
+*.LEAK-UNSICHER
+querylog.json*
+*.log
+__pycache__/

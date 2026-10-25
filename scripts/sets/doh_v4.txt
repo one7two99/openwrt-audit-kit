@@ -1,0 +1,124 @@
+# doh_v4 -- oeffentliche DoH/DoT-Resolver (IPv4), Ziel-Set fuer Block-<zone>-wan-doh.
+# Quelle dieser Datei: Repo scripts/sets/doh_v4.txt, ausgerollt mit scripts/pushset.sh
+# nach /etc/fw4-sets/doh_v4.txt (fw4 option loadfile, match dest_net).
+# Format: eine IPv4-Adresse oder ein IPv4/CIDR je Zeile; # und Leerzeilen werden ignoriert.
+# Hinweis: Quad9 9.9.9.10 / 149.112.112.10 sind AdGuards Bootstrap -- das Set wirkt nur
+# auf FORWARD aus den Zonen, nicht auf den Router selbst (OUTPUT).
+
+# Cloudflare 1.1.1.1 (+ Malware / Family) -- developers.cloudflare.com/1.1.1.1/ip-addresses, 2026-10-17
+1.1.1.1
+1.0.0.1
+1.1.1.2
+1.0.0.2
+1.1.1.3
+1.0.0.3
+
+# Google Public DNS -- developers.google.com/speed/public-dns/docs/using, 2026-10-17
+8.8.8.8
+8.8.4.4
+
+# Quad9 (secured, unsecured, ECS) -- quad9.net/service/service-addresses-and-features, 2026-10-17
+9.9.9.9
+149.112.112.112
+9.9.9.10
+149.112.112.10
+9.9.9.11
+149.112.112.11
+# Quad9 .12/.13 und 149.112.112.9 -- Operator-Liste 2026-10-17, nicht gegen die Anbieterseite geprueft
+9.9.9.12
+9.9.9.13
+149.112.112.9
+149.112.112.12
+149.112.112.13
+
+# OpenDNS / Cisco (Home, FamilyShield) -- adguard-dns.io/kb/general/dns-providers, 2026-10-17
+208.67.222.222
+208.67.220.220
+208.67.222.123
+208.67.220.123
+# OpenDNS Sandbox -- Operator-Liste 2026-10-17, ungeprueft
+208.67.222.2
+208.67.220.2
+
+# AdGuard DNS (Default, Non-filtering, Family) -- adguard-dns.io/kb/general/dns-providers, 2026-10-17
+94.140.14.14
+94.140.15.15
+94.140.14.15
+94.140.15.16
+94.140.14.140
+94.140.14.141
+# AdGuard 94.140.14.49 -- Operator-Liste 2026-10-17, ungeprueft
+94.140.14.49
+
+# NextDNS Anycast -- dibdot/DoH-IP-blocklists (45.90.28.0, 45.90.30.0) + AS34939-Netze, 2026-10-17
+45.90.28.0/24
+45.90.30.0/24
+
+# Mullvad DNS (alle Filtervarianten; Dienst endet laut Anbieter 2026-11-02) -- mullvad.net/en/help/dns-over-https-and-dns-over-tls, 2026-10-17
+194.242.2.2
+194.242.2.3
+194.242.2.4
+194.242.2.5
+194.242.2.6
+194.242.2.9
+
+# Control D (free resolvers) -- adguard-dns.io/kb/general/dns-providers + dibdot, 2026-10-17
+76.76.2.0
+76.76.10.0
+76.76.2.1
+76.76.2.2
+76.76.2.3
+76.76.2.11
+76.76.2.22
+
+# CleanBrowsing (Security, Family, Adult) -- adguard-dns.io/kb/general/dns-providers, 2026-10-17
+185.228.168.9
+185.228.169.9
+185.228.168.168
+185.228.169.168
+185.228.168.10
+185.228.169.11
+
+# DNS4EU (alle Varianten) -- joindns4.eu/for-public, 2026-10-17
+86.54.11.1
+86.54.11.201
+86.54.11.12
+86.54.11.212
+86.54.11.13
+86.54.11.213
+86.54.11.11
+86.54.11.211
+86.54.11.100
+86.54.11.200
+
+# Yandex DNS (Basic, Safe, Family) -- adguard-dns.io/kb/general/dns-providers, 2026-10-17
+77.88.8.8
+77.88.8.1
+77.88.8.88
+77.88.8.2
+77.88.8.3
+77.88.8.7
+
+# AliDNS, DNSPod -- Operator-Liste 2026-10-17, ungeprueft
+223.5.5.5
+223.6.6.6
+1.12.12.12
+
+# LibreDNS -- adguard-dns.io/kb/general/dns-providers, 2026-10-17
+116.202.176.26
+
+# Einzelresolver in Hetzner-Adressraeumen -- Operator-Liste 2026-10-17, ungeprueft
+# (Risiko: bei Adresswechsel des Resolvers kann ein fremder HTTPS-Dienst gesperrt sein)
+49.12.43.208
+49.12.67.122
+49.12.222.213
+49.12.223.2
+88.198.122.154
+91.99.154.175
+185.95.218.42
+185.95.218.43
+185.150.99.255
+116.203.32.217
+159.69.114.157
+
+# Nicht enthalten: dns0.eu (Anbieterseite am 2026-10-17 nicht abrufbar) -- nachtragen.
