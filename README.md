@@ -59,7 +59,6 @@ damit die Tabellen lesbar bleiben.
 
 | Datei | Inhalt |
 |---|---|
-| `example-audit-10h-wlan.{md,html}` | Kurz-Audit über 10 Stunden mit WLAN-Gesundheit (Signal, Raten, Retries, Inaktivitätsabbrüche, Kanalbelegung) |
 | `example-audit-weekly.{md,html}` | Wochen-Audit über Firewall- und Query-Log mit Befundliste, Vorschlägen, Sichtbarkeitslücken und den generierten Tabellen im Anhang |
 | `example-fwview.html` | Spiegelseite der Firewall aus `fwview.py` |
 | `example-agview.html` | Spiegelseite der AdGuard-Regeln aus `agview.py`, mit Trefferzahlen und Doku-Abgleich |
