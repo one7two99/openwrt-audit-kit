@@ -71,7 +71,9 @@ Mitgliedern und Gerätenamen.
 **`agview.py`**: Regeln nach den Überschriften der AdGuard-Liste gruppiert, Treffer je Regel aus
 dem Query-Log, Hinweise zu Clients und ungenutzten Freigaben, Abgleich gegen die Doku.
 
-![agview: AdGuard-Benutzerregeln als Spiegelseite](docs/example-agview.png)
+![agview: Kopf der Seite mit Kennzahlen, Doku-Abgleich und Hinweisen](docs/example-agview.png)
+
+![agview: Regelgruppe mit Client-Zuordnung, Begründung und Treffern](docs/example-agview-rules.png)
 
 ## Voraussetzungen
 
