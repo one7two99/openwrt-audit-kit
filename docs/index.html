@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>openwrt-audit-kit</title>
+<meta name="description" content="Read-only tooling that turns an OpenWrt + AdGuard Home setup into something you can read, audit and diff. Plus the firewall4 patch that makes IP sets usable as source and destination in one rule.">
+<style>
+:root {
+  --bg: #f7f5f0; --bg2: #ffffff; --bg3: #efece5; --fg: #1f1d1a; --fg2: #5b564f; --line: #ddd8ce;
+  --accent: #7a4b1e; --accent2: #b0722f; --ok: #2e7d4f; --warn: #a3471d; --code-bg: #f2efe9;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(40,30,10,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15140f; --bg2: #1e1c17; --bg3: #262420; --fg: #ebe6dc; --fg2: #a9a297; --line: #35322b;
+    --accent: #d3a06a; --accent2: #e3b989; --ok: #6cc48f; --warn: #e49062; --code-bg: #262420;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15140f; --bg2: #1e1c17; --bg3: #262420; --fg: #ebe6dc; --fg2: #a9a297; --line: #35322b;
+  --accent: #d3a06a; --accent2: #e3b989; --ok: #6cc48f; --warn: #e49062; --code-bg: #262420;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Ubuntu, Cantarell, sans-serif; -webkit-text-size-adjust: 100%; }
+code, pre, kbd { font-family: ui-monospace, "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+code { background: var(--code-bg); padding: .1em .35em; border-radius: 4px; font-size: .9em; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.1rem; overflow-x: auto; font-size: .86rem; line-height: 1.5; }
+pre code { background: none; padding: 0; font-size: inherit; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--accent2); }
+h1, h2, h3 { line-height: 1.2; letter-spacing: -.01em; margin: 0 0 .5rem; }
+h2 { font-size: 1.7rem; margin-top: 0; }
+h3 { font-size: 1.15rem; }
+p { margin: .5rem 0 1rem; }
+.wrap { max-width: 68rem; margin: 0 auto; padding: 0 16px; }
+.muted { color: var(--fg2); }
+.small { font-size: .9rem; }
+
+/* top bar */
+.bar { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; align-items: center; gap: 1rem; min-height: 3.2rem; flex-wrap: wrap; }
+.brand { font-weight: 700; text-decoration: none; color: var(--fg); }
+.brand span { color: var(--accent); }
+nav.top { display: flex; gap: .2rem 1rem; flex-wrap: wrap; margin-left: auto; font-size: .92rem; }
+nav.top a { color: var(--fg2); text-decoration: none; }
+nav.top a:hover { color: var(--accent); }
+.toggle { border: 1px solid var(--line); background: var(--bg2); color: var(--fg2); border-radius: 999px; padding: .2rem .7rem; cursor: pointer; font-size: .85rem; }
+
+/* hero */
+.hero { padding: 4rem 0 3rem; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--bg3), var(--bg)); }
+.hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; }
+.hero h1 span { color: var(--accent); }
+.hero .lead { font-size: 1.2rem; max-width: 42rem; color: var(--fg2); }
+.badges { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.2rem 0; }
+.badge { font-size: .8rem; border: 1px solid var(--line); background: var(--bg2); border-radius: 999px; padding: .15rem .7rem; color: var(--fg2); }
+.badge b { color: var(--fg); font-weight: 600; }
+.cta { display: flex; gap: .7rem; flex-wrap: wrap; margin-top: 1.4rem; }
+.btn { display: inline-block; padding: .6rem 1.1rem; border-radius: 8px; text-decoration: none; font-weight: 600; border: 1px solid var(--accent); }
+.btn.primary { background: var(--accent); color: var(--bg2); }
+.btn.primary:hover { background: var(--accent2); border-color: var(--accent2); color: var(--bg2); }
+.btn.ghost { color: var(--accent); background: transparent; }
+
+/* sections */
+section { padding: 3.2rem 0; border-bottom: 1px solid var(--line); }
+section:last-of-type { border-bottom: 0; }
+.kicker { text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--accent); font-weight: 700; margin-bottom: .4rem; }
+.grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); margin-top: 1.4rem; }
+.grid.g2 { grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); }
+.card { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 1.2rem 1.3rem; box-shadow: var(--shadow); }
+.card h3 { margin-top: 0; }
+.card .num { display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--bg3); color: var(--accent); font-weight: 700; font-size: .9rem; margin-bottom: .6rem; }
+.tool { display: grid; gap: .3rem 1rem; grid-template-columns: auto 1fr; align-items: baseline; }
+.tool dt { font-weight: 600; color: var(--fg2); font-size: .85rem; }
+.tool dd { margin: 0; font-size: .95rem; }
+.tag { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: .1rem .5rem; border-radius: 4px; margin-left: .4rem; vertical-align: middle; }
+.tag.ro { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.tag.rw { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+figure { margin: 1.6rem 0; }
+figure img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); background: #fff; }
+figcaption { font-size: .88rem; color: var(--fg2); margin-top: .5rem; }
+.two { display: grid; gap: 1.6rem; grid-template-columns: 1fr 1fr; align-items: start; }
+@media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; margin: 1rem 0; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--bg3); font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+.tablewrap { overflow-x: auto; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 1.4rem 0; display: grid; gap: .9rem; }
+.steps li { position: relative; padding-left: 2.6rem; }
+.steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: .1rem; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--accent); color: var(--bg2); display: grid; place-items: center; font-weight: 700; font-size: .85rem; }
+.callout { border-left: 4px solid var(--accent); background: var(--bg2); padding: .9rem 1.1rem; border-radius: 0 10px 10px 0; margin: 1.2rem 0; }
+.callout.warn { border-left-color: var(--warn); }
+.diff { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin: 1.2rem 0 1.6rem; align-items: stretch; }
+@media (max-width: 800px) { .diff { grid-template-columns: 1fr; } }
+.diff pre { margin: 0; min-height: 100%; }
+.diff > div { display: flex; flex-direction: column; }
+.diff > div pre { flex: 1; }
+.diff .lbl { font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; color: var(--fg2); margin-bottom: .4rem; }
+.pr { display: flex; gap: 1rem; align-items: flex-start; }
+.pr .no { font-family: ui-monospace, monospace; font-weight: 700; color: var(--accent); white-space: nowrap; }
+footer { padding: 2.5rem 0 3.5rem; color: var(--fg2); font-size: .9rem; border-top: 1px solid var(--line); }
+footer p { margin: .3rem 0; }
+.hl { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="wrap">
+    <a class="brand" href="#top">openwrt-<span>audit</span>-kit</a>
+    <nav class="top">
+      <a href="#why">Why</a>
+      <a href="#tools">Tools</a>
+      <a href="#audit">Audit</a>
+      <a href="#sets">Sets as objects</a>
+      <a href="#design">Design</a>
+      <a href="#start">Get started</a>
+      <a href="https://github.com/one7two99/openwrt-audit-kit">GitHub</a>
+    </nav>
+    <button class="toggle" id="theme" type="button" aria-label="Toggle colour theme">theme</button>
+  </div>
+</div>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <h1>Your router config,<br>as something you can <span>read</span>.</h1>
+    <p class="lead">Read-only tooling that turns an OpenWrt + AdGuard Home setup into pages you can read,
+      tables you can audit, and JSON you can diff. Written for a documented home network, released for
+      anyone who thinks a firewall should be explainable.</p>
+    <div class="badges">
+      <span class="badge"><b>Read-only</b> by construction</span>
+      <span class="badge"><b>Python 3</b> stdlib only</span>
+      <span class="badge"><b>POSIX sh</b></span>
+      <span class="badge"><b>Zero</b> CDN, fonts or trackers</span>
+      <span class="badge"><b>MIT</b></span>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="#start">Get started</a>
+      <a class="btn ghost" href="https://github.com/one7two99/openwrt-audit-kit">Source on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <div class="kicker">Why this exists</div>
+    <h2>A firewall you cannot read is a firewall you cannot trust.</h2>
+    <p>OpenWrt's <code>fw4</code> and AdGuard Home are excellent. Their configuration formats are not written
+      for humans who come back six months later. <code>uci export firewall</code> is a flat list of sections,
+      LuCI shows one rule at a time, and the AdGuard rule list is a text box. None of them answers the
+      questions an operator actually asks: <em>which devices may talk to the hub, on which ports, and why?</em></p>
+    <p>This kit grew out of a home network that is documented the way production systems should be: a
+      Markdown document is the source of truth, every change gets a journal entry, and audits are run against
+      logs, not against memory. The tools here are the glue between that documentation and the live device.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Mirror, not source</h3>
+        <p>The pages the kit renders are mirrors for reading. The documentation is the source; when the device
+          disagrees with the document, the device wins and the mismatch becomes a finding. <code>agview</code>
+          even diffs the device against your Markdown rule tables and reports both directions.</p>
+      </div>
+      <div class="card">
+        <h3>Read-only by construction</h3>
+        <p>SSH in <code>BatchMode</code> with key auth, <code>uci export</code> instead of <code>uci show</code>
+          (no wireless keys in the output), and only the <code>user_rules</code>, <code>filtering</code> and
+          <code>clients</code> sections of <code>adguardhome.yaml</code>, never the whole file. The one tool
+          that writes asks first and is labelled.</p>
+      </div>
+      <div class="card">
+        <h3>Boring output on purpose</h3>
+        <p>One self-contained HTML file plus the same data as JSON. Audit scripts emit Markdown tables, nothing
+          else: the tables are the <em>data</em> of an audit, the findings are written by a human who looked at
+          them. No dashboard, no database, no daemon.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tools">
+  <div class="wrap">
+    <div class="kicker">The tools</div>
+    <h2>Seven scripts, one idea.</h2>
+    <p class="muted">Everything runs on your workstation against the router. Device names come from the router's
+      DHCP reservations, zones from its network config, so every IP in every table carries a name you recognise.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>fwview.py <span class="tag ro">read-only</span></h3>
+        <dl class="tool">
+          <dt>Reads</dt><dd><code>uci export firewall | dhcp | network</code></dd>
+          <dt>Writes</dt><dd>one HTML page, one JSON report</dd>
+          <dt>Shows</dt><dd>one section per source zone, INPUT apart from FORWARD, then DNAT; every rule as a row with
+            source, destination, ports with service names, logging; IP sets expanded with members and device names.</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>agview.py <span class="tag ro">read-only</span></h3>
+        <dl class="tool">
+          <dt>Reads</dt><dd>AdGuard <code>user_rules</code>, rewrites, persistent clients</dd>
+          <dt>Writes</dt><dd>HTML + JSON</dd>
+          <dt>Shows</dt><dd>rules grouped by the <code>! --- heading ---</code> lines of your list, client scope resolved to
+            device and zone, the comment above a rule as its rationale, hits per rule from the query log, and a diff
+            against your documentation (<code>--doc</code>).</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>fwlog-audit.py <span class="tag ro">read-only</span></h3>
+        <dl class="tool">
+          <dt>Reads</dt><dd>the router's persistent syslog</dd>
+          <dt>Writes</dt><dd>Markdown tables for a time window</dd>
+          <dt>Shows</dt><dd>lines per log class and hour, INPUT noise per zone, lateral traffic between zones, egress blocks per
+            rule, minutes at the log rate limit (lines you <em>did not</em> see), scan indicators.</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>dnslog-audit.py <span class="tag ro">read-only</span></h3>
+        <dl class="tool">
+          <dt>Reads</dt><dd>AdGuard's <code>querylog.json</code> (gzip in transit or from a copy)</dd>
+          <dt>Writes</dt><dd>Markdown tables for a time window</dd>
+          <dt>Shows</dt><dd>volume per client and zone, which lists fire, exactly which names the default-deny IoT zones reached,
+            DoH/DoT bypass attempts, tunnelling heuristics, seconds at AdGuard's rate limit, upstream latency percentiles.</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>pushset.sh <span class="tag rw">writes, asks first</span></h3>
+        <dl class="tool">
+          <dt>Does</dt><dd>validates an IP-set file locally, refuses on any bad line, copies it to the router, creates or reloads the
+            <code>fw4</code> set (<code>option loadfile</code>). Ships with lists for public DoH/DoT resolvers, Google and Cloudflare ranges.</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>wificli.sh &amp; modemctl.sh <span class="tag rw">writes</span></h3>
+        <dl class="tool">
+          <dt>Do</dt><dd>switch single SSIDs or whole radios via UCI; enable or disable the LTE modem on a GL.iNet Spitz Plus. Both
+            carry a long header explaining how to find the right section or USB bus ID before you touch anything.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <figure>
+      <img src="example-fwview.png" alt="fwview: firewall rules rendered as one section per source zone, with IP sets expanded to their members and device names" loading="lazy">
+      <figcaption><strong>fwview.</strong> Zone <code>adminvpn</code>: INPUT rules apart from FORWARD, each IP set expanded in place
+        (<code>SET adminvpn_peers</code>, three addresses) and the destination resolved to a device name. Filter box and
+        zone navigation at the top; the whole thing is one HTML file.</figcaption>
+    </figure>
+
+    <div class="two">
+      <figure>
+        <img src="example-agview.png" alt="agview: page header with counts, hits from the query log, documentation diff and a list of hints" loading="lazy">
+        <figcaption><strong>agview, header.</strong> 121 active rules, hits from 94,187 query-log entries, and the diff against
+          the documentation: 121 documented, 121 on the device, 0 missing either way. Below it, the hints: clients whose
+          flags have no effect, roaming addresses without a reservation, allow-rules that never fired.</figcaption>
+      </figure>
+      <figure>
+        <img src="example-agview-rules.png" alt="agview: a rule group with type, rule text, domain, effect, client with device name and zone, rationale and hit count" loading="lazy">
+        <figcaption><strong>agview, rules.</strong> One group per heading in your AdGuard list. Each row: type, the rule as written,
+          domain with reach, effect, the client resolved to device and zone, the comment above it as rationale, and how often
+          it fired. Disabled rules are shown, greyed.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="audit">
+  <div class="wrap">
+    <div class="kicker">Workflow</div>
+    <h2>An audit, start to finish.</h2>
+    <p>Four commands, a few minutes, and you have the data for a report. The findings are yours to write; the
+      kit deliberately stops at the tables.</p>
+
+<pre><code># 1. Fetch AdGuard's query log compressed. AdGuard only flushes it to disk every
+#    1,000 entries, so the last hour of a quiet network may still sit in memory.
+ssh root@192.168.30.1 'gzip -c /var/persist/adguardhome/data/querylog.json' &gt; querylog.json.gz
+
+# 2. Firewall log of the window, as Markdown tables
+scripts/fwlog-audit.py --since '2026-10-25 00:30' --out fwlog.md
+
+# 3. DNS query log of the same window
+scripts/dnslog-audit.py --since '2026-10-25 00:30' --querylog querylog.json.gz --out dnslog.md
+
+# 4. Refresh the two mirrors; agview counts hits per rule from the same copy
+scripts/fwview.py --out fwview.html
+scripts/agview.py --out agview.html --querylog querylog.json.gz --doc docs/dns-filtering.md</code></pre>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Prefix</th><th>Class</th><th>Lines</th><th>Share</th><th>First</th><th>Last</th><th>Max/min</th><th>Limit/min</th><th>Minutes at limit</th></tr></thead>
+        <tbody>
+          <tr><td><code>reject wgvpn in</code></td><td>zone-in</td><td>55</td><td>38.5 %</td><td>25.10. 00:50</td><td>25.10. 10:28</td><td>4</td><td>10</td><td>0</td></tr>
+          <tr><td><code>reject smarthome_srv forward</code></td><td>zone-fwd</td><td>35</td><td>24.5 %</td><td>25.10. 00:30</td><td>25.10. 01:35</td><td>10</td><td>10</td><td><span class="hl">2</span></td></tr>
+          <tr><td><code>Block-hubsrv-wan-all</code></td><td>rule</td><td>30</td><td>21.0 %</td><td>25.10. 00:30</td><td>25.10. 01:35</td><td>9</td><td>6</td><td><span class="hl">3</span></td></tr>
+          <tr><td><code>drop wgvpn invalid ct state</code></td><td>invalid</td><td>19</td><td>13.3 %</td><td>25.10. 01:18</td><td>25.10. 09:25</td><td>3</td><td>–</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">Table T1 of <code>fwlog-audit.py</code>, from a real ten-hour window. The last column is the one people miss:
+      minutes in which the kernel's log rate limit was saturated, i.e. minutes with hits you never saw.</p>
+
+    <div class="callout">
+      <strong>No router at hand?</strong> Every Python tool has <code>--from-dir DIR</code> and reads saved
+      <code>uci export</code> output (and a query-log copy) from a directory instead of SSH. That is how the tests run,
+      and how you can inspect a colleague's export without touching their device.
+    </div>
+  </div>
+</section>
+
+<section id="sets">
+  <div class="wrap">
+    <div class="kicker">The firewall4 patch</div>
+    <h2>Sets as objects: source <em>and</em> destination in one rule.</h2>
+    <p>Here is the limitation that shaped this whole project. In stock <code>fw4</code> a rule or redirect can
+      reference exactly <strong>one</strong> named set via <code>option ipset</code>. You can say "source is in
+      this set" or "destination is in this set", but not both at once. The moment you want
+      <em>"only these pinned devices (IP + MAC) may reach this group of addresses"</em>, you are back to
+      writing one rule per device, or one rule per destination, and keeping them in sync by hand.</p>
+
+    <p>My router runs a patched <code>firewall4</code> that turns <code>option ipset</code> into
+      <code>list ipset</code>. Several sets in one rule are AND-ed; direction (<code>src</code>, <code>dest</code>) and
+      negation apply per entry; a single <code>option ipset</code> keeps working, and a ruleset without
+      multi-set rules renders byte-for-byte identical. Devices become members of sets, rules reference sets, and
+      a new device means <em>one</em> edit instead of a hunt through the rule list.</p>
+
+    <div class="diff">
+      <div>
+        <div class="lbl">Stock fw4: one set, one direction</div>
+<pre><code>config rule
+    option name 'Allow-admin-hub-ha-1'
+    option src 'private'
+    option src_ip '192.168.20.111'
+    option src_mac '02:aa:...'
+    option dest 'smarthome_srv'
+    option dest_ip '192.168.60.245'
+    option dest_port '8123'
+    option target 'ACCEPT'
+
+config rule
+    option name 'Allow-admin-hub-ha-2'
+    # ... same again for the next device</code></pre>
+      </div>
+      <div>
+        <div class="lbl">Patched fw4: sets as source and destination</div>
+<pre><code>config rule
+    option name 'Allow-admin-hub-ha'
+    option src 'private'
+    option dest 'smarthome_srv'
+    list ipset 'admin_pins src'    # ip+mac pairs
+    list ipset 'hub_ip dest'       # the hub
+    option dest_port '8123'
+    option target 'ACCEPT'
+
+# new admin device? add it to admin_pins.
+# a fifth device in the zone matches nothing:
+# fail-closed by default.</code></pre>
+      </div>
+    </div>
+
+    <p>In practice this means a pair set of pinned devices on the source side and an address set on the destination
+      side, in the same rule. On my router eighteen rules use two sets today, the mirror above renders them, and a
+      guard script re-applies the patch after upgrades and shouts if the installed <code>fw4</code> version is unknown.</p>
+
+    <div class="callout warn">
+      <strong>Fail-closed matters here.</strong> Stock <code>fw4</code> silently reads <code>option ipset 'setA setB'</code> as
+      a reference to <code>setA</code> alone: the rule matches fewer conditions than you wrote, and nothing tells you.
+      With list support that single-line form becomes a likely mistake, so the second PR rejects unknown tokens with a
+      warning instead of guessing.
+    </div>
+
+    <h3>Upstream pull requests</h3>
+    <p>Both are open against <code>openwrt/firewall4</code>. The feature series is split so that the three independent
+      fixes found on the way can be backported on their own.</p>
+    <div class="grid">
+      <div class="card pr">
+        <div class="no">#109</div>
+        <div>
+          <h3><a href="https://github.com/openwrt/firewall4/pull/109">fw4: support multiple ipset references per rule and redirect</a></h3>
+          <p class="small"><code>option ipset</code> becomes <code>list ipset</code>, references are AND-ed, each validated on its own.
+            Preceded by three fixes: an empty set match emitted for <code>proto 'tcp icmp'</code> with a port set (invalid nft,
+            whole ruleset failed to load), a misleading family-conflict message, and repeated separators in set references
+            shifting the direction to the wrong field. Templates <code>rule.uc</code>, <code>redirect.uc</code>,
+            <code>mangle-rule.uc</code>, core <code>fw4.uc</code>, three new test suites.</p>
+        </div>
+      </div>
+      <div class="card pr">
+        <div class="no">#110</div>
+        <div>
+          <h3><a href="https://github.com/openwrt/firewall4/pull/110">fw4: reject unknown tokens in ipset references</a></h3>
+          <p class="small">A reference with more than three tokens, or a token that is not a direction, now drops the section with the
+            usual <em>invalid value</em> warning instead of being silently truncated. The upgrade risk is stated openly in the PR,
+            and a warn-only variant is offered for discussion. Submitted separately so it can be taken, changed or dropped
+            without touching the feature series.</p>
+        </div>
+      </div>
+    </div>
+    <p class="small muted">The kit itself does not need the patch. On stock <code>fw4</code>, <code>fwview</code> simply renders
+      single-set rules. With the patch, it renders every set of a rule in place, which is what makes the mirror readable.</p>
+  </div>
+</section>
+
+<section id="design">
+  <div class="wrap">
+    <div class="kicker">Design notes</div>
+    <h2>Small decisions that keep it maintainable.</h2>
+    <div class="grid g2">
+      <div class="card">
+        <h3>Rule names carry the policy</h3>
+        <p><code>Allow-&lt;zone&gt;-&lt;target&gt;-&lt;service&gt;</code>, <code>Block-&lt;zone&gt;-wan-all</code>,
+          <code>Mute-&lt;zone&gt;-&lt;what&gt;</code>. A log line's prefix is enough to know which rule fired and whether that
+          was expected. <code>fwlog-audit</code> groups by exactly these prefixes.</p>
+      </div>
+      <div class="card">
+        <h3>Mute instead of ignore</h3>
+        <p>Known noise (mDNS, SSDP, NAT-PMP probes, discovery broadcasts) is dropped by small <code>nft</code> include files with
+          their own counters and no log, placed <em>before</em> the zone catch-all. The policy does not change; the log stops
+          lying about its volume and the rate limit stays free for the lines that matter.</p>
+      </div>
+      <div class="card">
+        <h3>Numbers you can diff</h3>
+        <p>Every table is deterministic for a given input. Re-run an audit with the same <code>--since</code> on a later log and
+          diff the Markdown. The JSON next to each HTML mirror is the same data without the layout, for scripts or for a model you
+          are willing to hand your addresses to.</p>
+      </div>
+      <div class="card">
+        <h3>Examples are real, and pseudonymised</h3>
+        <p>The sample pages in <code>reports/</code> come from real runs. MAC addresses are replaced by deterministic
+          <code>02:…</code> pseudonyms, consistent across files; device prefixes that were initials are neutral now. Private
+          IPs and zones are untouched so the tables stay legible.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="kicker">Get started</div>
+    <h2>Clone, point it at your router, read.</h2>
+    <ol class="steps">
+      <li><strong>Prerequisites.</strong> Workstation: Python 3.9+ and OpenSSH. Router: OpenWrt with <code>fw4</code>, dropbear
+        key auth for <code>root</code>, AdGuard Home with its query log on disk. Device names come from
+        <code>uci export dhcp</code>, so reservations pay off twice.</li>
+      <li><strong>Clone.</strong>
+<pre><code>git clone https://github.com/one7two99/openwrt-audit-kit.git
+cd openwrt-audit-kit</code></pre></li>
+      <li><strong>First mirror.</strong> The default host is <code>root@192.168.30.1</code>; pass your own with <code>--host</code>.
+<pre><code>scripts/fwview.py --host root@192.168.1.1 --out fwview.html
+scripts/agview.py --host root@192.168.1.1 --out agview.html --no-doc
+xdg-open fwview.html</code></pre></li>
+      <li><strong>Read the headers.</strong> Every script starts with a long comment: purpose, usage, options, exit codes, and what
+        exactly it reads on the device. That comment is the documentation; there is no separate manual to drift.</li>
+    </ol>
+    <div class="callout warn">
+      <strong>Your output is sensitive.</strong> Rendered pages and tables contain the real IPs, MACs and device names of your
+      network. The repository's <code>.gitignore</code> excludes all generated files; keep it that way before you publish anything.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><strong>openwrt-audit-kit</strong> · MIT License · <a href="https://github.com/one7two99/openwrt-audit-kit">github.com/one7two99/openwrt-audit-kit</a></p>
+    <p>Tools and documentation were drafted with the help of an LLM and reviewed, tested and run by the operator against
+      a live network. Findings in audits are always written by a human.</p>
+    <p class="small">This page loads no external resources. System fonts, inline CSS, three PNGs from the same directory.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById('theme');
+  var saved = null;
+  try { saved = localStorage.getItem('theme'); } catch (e) {}
+  if (saved === 'light' || saved === 'dark') root.setAttribute('data-theme', saved);
+  btn.addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

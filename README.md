@@ -10,6 +10,17 @@ Entstanden aus der Dokumentation eines konkreten Netzes (OpenWrt One, AdGuard Ho
 Spitz Plus als LTE-Uplink). Defaults wie
 `root@192.168.30.1` stammen daher und sind per Option oder Variable änderbar.
 
+**Projektseite:** <https://one7two99.github.io/openwrt-audit-kit/> (Quelle: `docs/index.html`) erklärt
+Hintergrund, Werkzeuge und Audit-Ablauf mit Screenshots.
+
+**Angepasstes firewall4:** Der Router hinter diesem Kit läuft mit einem Patch, der `option ipset` zu
+`list ipset` macht. Mehrere IP-Sets in einer Regel sind UND-verknüpft, Richtung je Eintrag; damit kann ein
+Set als Quelle **und** ein anderes als Ziel derselben Regel dienen, und Regeln arbeiten mit Objekten statt
+Einzeleinträgen. Upstream eingereicht als
+[openwrt/firewall4#109](https://github.com/openwrt/firewall4/pull/109) (Feature plus drei Fixes) und
+[openwrt/firewall4#110](https://github.com/openwrt/firewall4/pull/110) (unbekannte Tokens in Set-Referenzen
+ablehnen). Das Kit funktioniert auch ohne den Patch; `fwview.py` rendert dann Regeln mit einem Set.
+
 ## Werkzeuge
 
 | Skript | Zweck | Schreibt auf das Gerät? |
