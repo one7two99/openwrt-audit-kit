@@ -45,25 +45,23 @@ scripts/fwview.py --out fwview.html
 scripts/agview.py --out agview.html --querylog /tmp/querylog.json.gz --no-doc
 ```
 
-Die Tabellen sind die Daten eines Audits. Befunde, Bewertung und Vorschläge werden von Hand
-geschrieben; `reports/` zeigt, wie so ein Bericht aussieht.
+Die Tabellen sind die Daten eines Audits. Befunde, Bewertung und Vorschläge schreibt man von Hand
+darüber; das Repo enthält bewusst keine fertigen Audit-Berichte, nur Skript-Ausgaben.
 
-## Beispielberichte (`reports/`)
+## Beispielausgaben (`reports/`)
 
-Echte Läufe aus dem Ursprungsnetz, pseudonymisiert: **alle MAC-Adressen** durch deterministische
-Pseudonyme ersetzt (`02:…`, lokal verwaltet, konsistent über alle Dateien), Personenbezug entfernt
-(Gerätepräfixe `OP-…`, Personen-Initialen in Gerätenamen durch `K1-`/`K2-`/`GX-`, Domains und Tailnet als `<REMOVED>`, NextDNS-Profil als `<NEXTDNS-ID>`,
-Geräte-IDs in Hostnamen als `<UUID>`/`<DEVICE-ID>`, Pfade als `<scratch>`). Private IP-Adressen,
-Zonen und die öffentlichen Adressen von Diensten, die die Geräte angesprochen haben, sind unverändert,
-damit die Tabellen lesbar bleiben.
+Echte Läufe von `fwview.py` und `agview.py` aus dem Ursprungsnetz, pseudonymisiert: **alle
+MAC-Adressen** durch deterministische Pseudonyme ersetzt (`02:…`, lokal verwaltet, konsistent über
+beide Dateien), Personenbezug entfernt (Gerätepräfixe `OP-…`, Personen-Initialen in Gerätenamen
+durch `K1-`/`K2-`/`GX-`). Private IP-Adressen und Zonen sind unverändert, damit die Tabellen lesbar
+bleiben.
 
 | Datei | Inhalt |
 |---|---|
-| `example-audit-weekly.{md,html}` | Wochen-Audit über Firewall- und Query-Log mit Befundliste, Vorschlägen, Sichtbarkeitslücken und den generierten Tabellen im Anhang |
 | `example-fwview.html` | Spiegelseite der Firewall aus `fwview.py` |
 | `example-agview.html` | Spiegelseite der AdGuard-Regeln aus `agview.py`, mit Trefferzahlen und Doku-Abgleich |
 
-Die HTML-Dateien sind eigenständig (Stylesheet inline, keine externen Verweise).
+Beide Dateien sind eigenständig (Stylesheet inline, keine externen Verweise).
 
 ## Voraussetzungen
 
